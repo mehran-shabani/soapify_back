@@ -290,8 +290,7 @@ class BoxMoney(models.Model):
 
     def add_amount(self, amount: int) -> None:
         """افزایش موجودی کیف پول"""
-        self.amount += amount
-        self.save(update_fields=['amount'])
+        BoxMoney.objects.filter(pk=self.pk).update(amount=F('amount') + amount)
 
     def get_balance(self) -> int:
         """دریافت موجودی فعلی"""
