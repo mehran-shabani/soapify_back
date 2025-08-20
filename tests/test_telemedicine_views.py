@@ -394,10 +394,10 @@ class TestDownloadAPKView:
         assert resp.status_code == 404
         assert "error" in resp.data
 
-    @patch("telemedicine.views.os.path.exists", return_value=True)
-    @patch("telemedicine.views.open", create=True)
-    @patch("telemedicine.views.APKDownloadStat.objects.only")
-    @patch("telemedicine.views.apk_downloaded.send")
+    @patch("crazy_miner.telemedicine.views.os.path.exists", return_value=True)
+    @patch("crazy_miner.telemedicine.views.open", create=True)
+    @patch("crazy_miner.telemedicine.views.APKDownloadStat.objects.only")
+    @patch("crazy_miner.telemedicine.views.apk_downloaded.send")
     def test_success_sets_headers_and_streams(self, mock_signal, mock_only, mock_open, mock_exists, api_client):
         # Mock file open to return a readable buffer
         mock_open.return_value = io.BytesIO(b"apkcontent")
