@@ -1,0 +1,142 @@
+# Sidebars Configuration for SOAPify Documentation
+
+- group: شروع سریع
+  items:
+    - page: معرفی SOAPify
+      link: /introduction/
+    - page: راه‌اندازی اولیه
+      link: /getting-started/
+    - page: احراز هویت
+      link: /authentication/
+      items:
+        - page: ثبت‌نام با شماره تلفن
+          link: /authentication/phone-registration/
+        - page: ورود با کد یکبار مصرف
+          link: /authentication/otp-login/
+        - page: مدیریت توکن JWT
+          link: /authentication/jwt-tokens/
+
+- group: APIهای اصلی
+  items:
+    - page: مدیریت ملاقات‌ها
+      link: /core/encounters/
+      items:
+        - page: ایجاد ملاقات
+          link: /core/encounters/create/
+        - page: جستجو و فیلتر
+          link: /core/encounters/search/
+        - page: به‌روزرسانی وضعیت
+          link: /core/encounters/status/
+    
+    - page: پردازش صوت (STT)
+      link: /core/stt/
+      items:
+        - page: شروع ضبط
+          link: /core/stt/recording/
+        - page: آپلود فایل صوتی
+          link: /core/stt/upload/
+        - page: دریافت رونوشت
+          link: /core/stt/transcription/
+    
+    - page: پردازش متن (NLP)
+      link: /core/nlp/
+      items:
+        - page: تولید پیش‌نویس SOAP
+          link: /core/nlp/generate-draft/
+        - page: استخراج اطلاعات
+          link: /core/nlp/extraction/
+        - page: تحلیل احساسات
+          link: /core/nlp/sentiment/
+
+- group: ویژگی‌های پیشرفته
+  items:
+    - page: چک‌لیست‌های پویا
+      link: /features/checklists/
+      items:
+        - page: قالب‌های چک‌لیست
+          link: /features/checklists/templates/
+        - page: ارزیابی و امتیازدهی
+          link: /features/checklists/evaluation/
+    
+    - page: جستجوی پیشرفته
+      link: /features/search/
+      items:
+        - page: جستجوی معنایی
+          link: /features/search/semantic/
+        - page: فیلترهای ترکیبی
+          link: /features/search/filters/
+    
+    - page: خروجی و گزارش‌ها
+      link: /features/outputs/
+      items:
+        - page: قالب‌های خروجی
+          link: /features/outputs/templates/
+        - page: صادرات PDF/DOCX
+          link: /features/outputs/export/
+        - page: اشتراک‌گذاری امن
+          link: /features/outputs/sharing/
+
+- group: یکپارچه‌سازی‌ها
+  items:
+    - page: اتصال به Helssa
+      link: /integrations/helssa/
+      items:
+        - page: تنظیمات اولیه
+          link: /integrations/helssa/setup/
+        - page: همگام‌سازی داده‌ها
+          link: /integrations/helssa/sync/
+        - page: مدیریت خطاها
+          link: /integrations/helssa/errors/
+    
+    - page: وب‌هوک‌ها
+      link: /integrations/webhooks/
+      items:
+        - page: پیکربندی
+          link: /integrations/webhooks/configuration/
+        - page: رویدادهای پشتیبانی شده
+          link: /integrations/webhooks/events/
+        - page: امنیت و امضا
+          link: /integrations/webhooks/security/
+
+- group: مدیریت و تحلیل
+  items:
+    - page: داشبورد تحلیلی
+      link: /analytics/dashboard/
+    - page: گزارش‌های عملکرد
+      link: /analytics/reports/
+    - page: مدیریت کاربران
+      link: /admin/users/
+    - page: تنظیمات سیستم
+      link: /admin/settings/
+
+- group: راهنمای توسعه
+  items:
+    - page: محیط توسعه
+      link: /development/environment/
+    - page: نمونه کدها
+      link: /development/examples/
+      items:
+        - page: Python
+          link: /development/examples/python/
+        - page: JavaScript/Node.js
+          link: /development/examples/javascript/
+        - page: PHP
+          link: /development/examples/php/
+        - page: C#/.NET
+          link: /development/examples/csharp/
+    
+    - page: SDKs
+      link: /development/sdks/
+    - page: بهترین شیوه‌ها
+      link: /development/best-practices/
+
+- group: پشتیبانی
+  items:
+    - page: سوالات متداول
+      link: /support/faq/
+    - page: عیب‌یابی
+      link: /support/troubleshooting/
+    - page: محدودیت‌ها و نرخ
+      link: /support/rate-limits/
+    - page: تماس با پشتیبانی
+      link: /support/contact/
