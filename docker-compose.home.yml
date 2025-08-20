@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: soapify_db_home
+    environment:
+      - POSTGRES_DB=soapify
+      - POSTGRES_USER=soapify
+      - POSTGRES_PASSWORD=localpass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  redis:
+    image: redis:7-alpine
+    container_name: soapify_redis_home
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_web_home
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn soapify.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=home-dev-secret-key-change-this
+      - DATABASE_URL=postgresql://soapify:localpass123@db:5432/soapify
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      # External services (set your own keys)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-key}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.gapgpt.app/v1}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-soapify-local}
+      - S3_REGION_NAME=${S3_REGION_NAME:-us-east-1}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      # Integrations (optional for home use)
+      - HELSSA_API_KEY=${HELSSA_API_KEY:-}
+      - HELSSA_SHARED_SECRET=${HELSSA_SHARED_SECRET:-}
+      - CRAZY_MINER_API_KEY=${CRAZY_MINER_API_KEY:-}
+      - CRAZY_MINER_SHARED_SECRET=${CRAZY_MINER_SHARED_SECRET:-}
+      # Security
+      - HMAC_SHARED_SECRET=home-hmac-secret
+      - LOCAL_JWT_SECRET=home-jwt-secret
+      # Feature flags
+      - SWAGGER_ENABLED=True
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_celery_home
+    command: celery -A soapify worker -l info --concurrency=2
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://soapify:localpass123@db:5432/soapify
+      - REDIS_URL=redis://redis:6379/0
+      # Copy same environment variables as web
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-key}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.gapgpt.app/v1}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-soapify-local}
+      - S3_REGION_NAME=${S3_REGION_NAME:-us-east-1}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_beat_home
+    command: celery -A soapify beat -l info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://soapify:localpass123@db:5432/soapify
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_flower_home
+    command: celery -A soapify flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - DATABASE_URL=postgresql://soapify:localpass123@db:5432/soapify
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+
+  # MinIO for local S3-compatible storage (optional)
+  minio:
+    image: minio/minio:latest
+    container_name: soapify_minio_home
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  # React Frontend (will be added later)
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    container_name: soapify_frontend_home
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api
+    depends_on:
+      - web
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    profiles:
+      - frontend
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+  minio_data:
+
+networks:
+  default:
+    name: soapify_home_network

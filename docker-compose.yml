@@ -1,0 +1,143 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-soapify}
+      POSTGRES_USER: ${DB_USER:-soapify}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-soapify_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # برای امنیت در سرور، پورت را به localhost محدود کنید
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-soapify} -d ${DB_NAME:-soapify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    # اجرای مهاجرت‌ها و کالکت‌استاتیک قبل از گانیکورن
+    command: >
+      sh -c "
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      gunicorn soapify.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers ${GUNICORN_WORKERS:-4}
+        --timeout 120"
+    env_file:
+      - .env
+    environment:
+      # اتصال داخلی سرویس‌ها
+      DATABASE_URL: postgresql://${DB_USER:-soapify}:${DB_PASSWORD:-soapify_password}@db:5432/${DB_NAME:-soapify}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # پیشنهاد: یک endpoint ساده /healthz در Django بسازید
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  celery-worker:
+    build: .
+    command: >
+      sh -c "celery -A soapify worker
+             --loglevel=info
+             --concurrency=${CELERY_CONCURRENCY:-4}"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-soapify}:${DB_PASSWORD:-soapify_password}@db:5432/${DB_NAME:-soapify}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    command: >
+      sh -c "celery -A soapify beat
+             --loglevel=info
+             --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-soapify}:${DB_PASSWORD:-soapify_password}@db:5432/${DB_NAME:-soapify}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  flower:
+    build: .
+    command: >
+      sh -c "celery -A soapify flower
+             --address=0.0.0.0
+             --port=5555"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-soapify}:${DB_PASSWORD:-soapify_password}@db:5432/${DB_NAME:-soapify}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5555:5555"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      # اگر SSL دارید:
+      # - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+      # اگر SSL فعال است:
+      # - ./ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:

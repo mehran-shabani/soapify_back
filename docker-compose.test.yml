@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # Test Database
+  test-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: soapify_test
+      POSTGRES_USER: soapify
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soapify"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Test Redis
+  test-redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Django Test Application
+  test-web:
+    build: .
+    command: python manage.py test --verbosity=2
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://soapify:test_password@test-db:5432/soapify_test
+      - REDIS_URL=redis://test-redis:6379/0
+      - SECRET_KEY=test-secret-key
+      - CELERY_TASK_ALWAYS_EAGER=True
+      - CELERY_TASK_EAGER_PROPAGATES=True
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  # Django System Check
+  check:
+    build: .
+    command: python manage.py check --deploy
+    environment:
+      - DEBUG=False
+      - DATABASE_URL=postgresql://soapify:test_password@test-db:5432/soapify_test
+      - REDIS_URL=redis://test-redis:6379/0
+      - SECRET_KEY=test-secret-key-for-production-check
+      - ALLOWED_HOSTS=test.soapify.local
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - .:/app

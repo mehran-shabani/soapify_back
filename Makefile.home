@@ -1,0 +1,112 @@
+# SOAPify Home Environment Makefile
+# Easy commands for running SOAPify on your home computer
+
+.PHONY: help setup start stop restart logs clean test frontend
+
+# Default target
+help:
+	@echo "SOAPify Home Environment Commands:"
+	@echo "  make setup      - Initial setup for home environment"
+	@echo "  make start      - Start all services"
+	@echo "  make stop       - Stop all services"
+	@echo "  make restart    - Restart all services"
+	@echo "  make logs       - View logs"
+	@echo "  make clean      - Clean up containers and volumes"
+	@echo "  make test       - Run tests"
+	@echo "  make frontend   - Start with frontend included"
+
+# Initial setup
+setup:
+	@echo "Setting up SOAPify for home use..."
+	@cp -n .env.home.example .env.home 2>/dev/null || true
+	@echo "✓ Created .env.home (please edit with your API keys)"
+	@docker-compose -f docker-compose.home.yml build
+	@echo "✓ Built Docker images"
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py migrate
+	@echo "✓ Database migrations complete"
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py createsuperuser
+	@echo "✓ Setup complete! Run 'make start' to begin"
+
+# Start services
+start:
+	@echo "Starting SOAPify services..."
+	@docker-compose -f docker-compose.home.yml --env-file .env.home up -d
+	@echo "✓ Services started!"
+	@echo "  - Web UI: http://localhost:8000"
+	@echo "  - Admin: http://localhost:8000/admin"
+	@echo "  - API Docs: http://localhost:8000/swagger"
+	@echo "  - Flower: http://localhost:5555"
+	@echo "  - MinIO: http://localhost:9001 (minioadmin/minioadmin)"
+
+# Stop services
+stop:
+	@echo "Stopping SOAPify services..."
+	@docker-compose -f docker-compose.home.yml down
+	@echo "✓ Services stopped"
+
+# Restart services
+restart: stop start
+
+# View logs
+logs:
+	@docker-compose -f docker-compose.home.yml logs -f
+
+# View specific service logs
+logs-web:
+	@docker-compose -f docker-compose.home.yml logs -f web
+
+logs-celery:
+	@docker-compose -f docker-compose.home.yml logs -f celery
+
+# Clean up everything
+clean:
+	@echo "Cleaning up SOAPify home environment..."
+	@docker-compose -f docker-compose.home.yml down -v
+	@echo "✓ Cleaned up containers and volumes"
+
+# Run tests
+test:
+	@echo "Running tests..."
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py test
+
+# Start with frontend
+frontend:
+	@echo "Starting SOAPify with React frontend..."
+	@docker-compose -f docker-compose.home.yml --profile frontend --env-file .env.home up -d
+	@echo "✓ Services started!"
+	@echo "  - Frontend: http://localhost:3000"
+	@echo "  - Backend API: http://localhost:8000"
+	@echo "  - Admin: http://localhost:8000/admin"
+
+# Create MinIO bucket
+setup-minio:
+	@echo "Setting up MinIO bucket..."
+	@docker-compose -f docker-compose.home.yml exec minio mc alias set local http://localhost:9000 minioadmin minioadmin
+	@docker-compose -f docker-compose.home.yml exec minio mc mb local/soapify-local --ignore-existing
+	@docker-compose -f docker-compose.home.yml exec minio mc anonymous set public local/soapify-local
+	@echo "✓ MinIO bucket created"
+
+# Database shell
+db-shell:
+	@docker-compose -f docker-compose.home.yml exec db psql -U soapify
+
+# Django shell
+shell:
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py shell
+
+# Create a new app
+create-app:
+	@read -p "Enter app name: " app_name; \
+	docker-compose -f docker-compose.home.yml run --rm web python manage.py startapp $$app_name
+
+# Run migrations
+migrate:
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py migrate
+
+# Make migrations
+makemigrations:
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py makemigrations
+
+# Collect static files
+collectstatic:
+	@docker-compose -f docker-compose.home.yml run --rm web python manage.py collectstatic --noinput

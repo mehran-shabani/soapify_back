@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-soapify}
+      POSTGRES_USER: ${POSTGRES_USER:-soapify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soapify123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-soapify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - DEBUG=${DEBUG:-True}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-soapify}:${POSTGRES_PASSWORD:-soapify123}@db:5432/${POSTGRES_DB:-soapify}
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
+      - SWAGGER_ENABLED=True
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-test-key}
+      - CRAZY_MINER_API_KEY=${CRAZY_MINER_API_KEY:-test-key}
+      - CRAZY_MINER_SHARED_SECRET=${CRAZY_MINER_SHARED_SECRET:-test-secret}
+      - HMAC_SHARED_SECRET=${HMAC_SHARED_SECRET:-test-hmac-secret}
+      - HELSSA_API_KEY=${HELSSA_API_KEY:-test-key}
+      - HELSSA_SHARED_SECRET=${HELSSA_SHARED_SECRET:-test-secret}
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker
+  celery-worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A soapify worker --loglevel=info --concurrency=2
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-soapify}:${POSTGRES_PASSWORD:-soapify123}@db:5432/${POSTGRES_DB:-soapify}
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-test-key}
+      - CRAZY_MINER_API_KEY=${CRAZY_MINER_API_KEY:-test-key}
+      - CRAZY_MINER_SHARED_SECRET=${CRAZY_MINER_SHARED_SECRET:-test-secret}
+      - HMAC_SHARED_SECRET=${HMAC_SHARED_SECRET:-test-hmac-secret}
+      - HELSSA_API_KEY=${HELSSA_API_KEY:-test-key}
+      - HELSSA_SHARED_SECRET=${HELSSA_SHARED_SECRET:-test-secret}
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build: 
+      context: ./front
+      dockerfile: Dockerfile
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "3000:3000"
+      - "8000:8000"
+    volumes:
+      - ./nginx.full.conf:/etc/nginx/nginx.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
