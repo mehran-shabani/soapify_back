@@ -11,7 +11,7 @@ def bitpay_request_payment(self, api_key, redirect_url, amount, order_id):
 
     response = requests.post('https://bitpay.ir/payment/gateway-send', data=data)
 
-    if response > 0:
+    if response.ok:
         return response
     else:
         return {'status': -1, 'message': 'Failed to connect to the payment gateway.'}
