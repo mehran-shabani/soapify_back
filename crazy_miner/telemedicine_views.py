@@ -210,7 +210,7 @@ class CreateVisit(APIView):
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def get(self, request):
         serializer = CustomUserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
