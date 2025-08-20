@@ -284,3 +284,15 @@ SUMMARY_MODEL_NAME  = os.getenv('SUMMARY_MODEL_NAME', 'o3-mini')      # یا 'gp
 # توکن‌ها
 RESPONSE_MAX_TOKENS = int(os.getenv('RESPONSE_MAX_TOKENS', '1500'))
 SUMMARY_MAX_TOKENS  = int(os.getenv('SUMMARY_MAX_TOKENS', '900'))
+
+# CrazyMiner Payment Settings
+PAYMENT_GATEWAY_URL = os.getenv('PAYMENT_GATEWAY_URL', 'https://api.medogram.ir')
+PAYMENT_API_KEY = os.getenv('PAYMENT_API_KEY', '')  # باید در محیط تنظیم شود
+PAYMENT_REDIRECT_URL = os.getenv('PAYMENT_REDIRECT_URL', 'https://medogram.ir/payment-redirect/')
+
+# Logging for payment
+LOGGING['loggers']['crazy_miner.payment'] = {
+    'handlers': ['console', 'file'],
+    'level': 'INFO',
+    'propagate': True,
+}
