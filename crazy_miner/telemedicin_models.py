@@ -16,6 +16,25 @@ from rest_framework.exceptions import ValidationError
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, phone_number=None, email=None, username=None, password=None, **extra_fields):
+        """
+        Create and persist a new user, requiring at least a phone number or an email.
+        
+        If username is not provided it will be derived from phone_number (preferred) or email.
+        The password is hashed via set_password before saving.
+        
+        Parameters:
+            phone_number (str | None): User's phone number. Required if email is omitted.
+            email (str | None): User's email. Required if phone_number is omitted.
+            username (str | None): Desired username; if omitted it is derived from phone_number or email.
+            password (str | None): Plain-text password; will be hashed before storing.
+            **extra_fields: Additional model fields forwarded to the user model.
+        
+        Returns:
+            CustomUser: The created and saved user instance.
+        
+        Raises:
+            ValueError: If both phone_number and email are not provided.
+        """
         if not phone_number and not email:
             raise ValueError('شماره موبایل یا ایمیل ضروری است')
 
@@ -28,6 +47,24 @@ class CustomUserManager(BaseUserManager):
         return user
 
     def create_superuser(self, username=None, email=None, password=None, **extra_fields):
+        """
+        Create and save a superuser with staff and superuser privileges.
+        
+        Ensures 'is_staff' and 'is_superuser' are set to True, validates that both
+        username and email are provided, and delegates to create_user to create the user.
+        
+        Raises:
+            ValueError: If email or username is not provided (messages are in Persian).
+        
+        Parameters:
+            username: The username for the new superuser.
+            email: The email address for the new superuser.
+            password: Plain-text password for the new superuser.
+            **extra_fields: Additional fields passed through to create_user.
+        
+        Returns:
+            The created user instance.
+        """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
@@ -55,22 +92,74 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['email']
 
     def __str__(self):
+        """
+        Return the user's username as the model's string representation.
+        
+        This provides a human-readable identifier for the user instance, suitable for admin displays and logging.
+        """
         return self.username
 
     def has_perm(self, perm, obj=None):
+        """
+        Return whether the user has the given permission.
+        
+        This implementation grants all permissions only to superusers. The `perm`
+        and `obj` arguments are accepted for compatibility with Django's auth
+        API but are ignored.
+        
+        Parameters:
+            perm (str): Permission codename (ignored).
+            obj (optional): Object to check permission against (ignored).
+        
+        Returns:
+            bool: True if the user is a superuser, otherwise False.
+        """
         return self.is_superuser
 
     def has_module_perms(self, app_label):
+        """
+        Return whether the user has permissions for the given app.
+        
+        This implementation grants module-level permissions only to superusers.
+        
+        Parameters:
+            app_label (str): The Django app label being checked (ignored by this implementation).
+        
+        Returns:
+            bool: True if the user is a superuser, otherwise False.
+        """
         return self.is_superuser
 
     def get_full_name(self):
+        """
+        Return the user's full name.
+        
+        Returns:
+            str: The user's username (used as the full name).
+        """
         return self.username
 
     def get_short_name(self):
+        """
+        Return the user's short display name.
+        
+        This returns the user's `username`, which is used as the short name shown in UIs.
+        If `username` is unset, this will return None.
+        """
         return self.username
 
 
 def drug_image_path(instance, filename):
+    """
+    Return a deterministic upload path for a drug image incorporating the user's ID and a timestamp.
+    
+    Parameters:
+        instance: Model instance with a related `user` attribute (used to obtain user.id).
+        filename (str): Original filename; appended to the generated path.
+    
+    Returns:
+        str: File path in the form 'drug_images/<user_id>/<unix_timestamp>_<filename>'.
+    """
     return f'drug_images/{instance.user.id}/{int(time.time())}_{filename}'
 
 
@@ -167,9 +256,12 @@ class Visit(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        اگر فیلد drug_images به صورت بایت خام (bytes) باشد، آن را به فایل تبدیل می‌کنیم.
-        سپس اگر فایل پسوند HEIC/HEIF داشته باشد، تلاش می‌کنیم آن را به JPEG تبدیل کنیم.
-        در صورت خطا در تبدیل، از آن عبور می‌کنیم تا اصل ذخیره‌ی ویزیت مختل نشود.
+        Convert raw bytes and HEIC/HEIF drug image uploads to storable image files before saving the Visit.
+        
+        If self.drug_images is raw bytes, converts it to a Django ContentFile. If the uploaded file has a
+        '.heic' or '.heif' extension, attempts to convert it to a JPEG (RGB, quality=85) and replaces the
+        stored file with the resulting JPEG. Conversion failures are caught and ignored so saving the model
+        still completes.
         """
         # --- 1) اگر به صورت بایت خام آمده باشد، تبدیل به فایل می‌کنیم ---
         if isinstance(self.drug_images, bytes):
@@ -196,6 +288,12 @@ class Visit(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
+        """
+        Return a human-readable representation for the Visit instance.
+        
+        Returns:
+            str: Representation in the format "<name> - <id>", combining the visit's name and its primary key.
+        """
         return f"{self.name} - {self.id}"
 
     
@@ -212,10 +310,27 @@ class Transaction(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """
+        Return a human-readable representation of the transaction.
+        
+        Returns:
+            str: Formatted as "Transaction <user.phone_number> - <amount> - <status>".
+        """
         return f"Transaction {self.user.phone_number} - {self.amount} - {self.status}"
 
 
 def validate_image_url(value):
+    """
+    Validate that `value` is a valid URL pointing to a common image file.
+    
+    Checks that `value` is a syntactically valid URL and that its path ends with one of the supported image extensions ('.jpg', '.jpeg', '.png', '.gif', '.webp'). Raises a ValidationError if the URL is invalid or does not appear to reference an image.
+    
+    Parameters:
+        value (str): The URL to validate.
+    
+    Raises:
+        django.core.exceptions.ValidationError: If the URL is not valid (message: 'لطفاً یک آدرس URL معتبر وارد کنید') or if it does not end with a supported image extension (message: 'لطفاً یک آدرس تصویر معتبر وارد کنید').
+    """
     url_validator = URLValidator()
     try:
         url_validator(value)
@@ -247,6 +362,12 @@ class Blog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
+        """
+        Return the blog's title as its string representation.
+        
+        Returns:
+            str: The blog post's title.
+        """
         return self.title
 
     class Meta:
@@ -261,9 +382,19 @@ class Comment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
+        """
+        Return a short, human-readable representation of the comment.
+        
+        The string identifies the comment's author by username, e.g. "Comment by alice".
+        """
         return f"Comment by {self.user.username}"
 
     def like(self):
+        """
+        Increment the comment's like counter by one and persist the change.
+        
+        Updates the instance's `likes` field and saves the model to the database.
+        """
         self.likes += 1
         self.save()
 
@@ -274,13 +405,28 @@ class BoxMoney(models.Model):
     amount = models.PositiveIntegerField(default=0)
 
     def has_sufficient_balance(self, price: int) -> bool:
-        """بررسی کافی بودن موجودی"""
+        """
+        Return True if the wallet balance is greater than or equal to the given price.
+        
+        Parameters:
+            price (int): Amount to check against the current balance.
+        
+        Returns:
+            bool: True if balance >= price, otherwise False.
+        """
         return self.amount >= price
 
     def deduct_amount(self, price: int) -> bool:
         """
-        کم کردن مبلغ از کیف پول
-        در صورت موفقیت True برمی‌گرداند
+        Deduct the given amount from the wallet if sufficient balance exists.
+        
+        If the wallet has at least `price`, the amount is subtracted and the model is saved; otherwise no change is made.
+        
+        Parameters:
+            price (int): Amount to deduct (in the same integer currency units stored on the model).
+        
+        Returns:
+            bool: True when the deduction succeeded, False when the balance was insufficient.
         """
         if self.has_sufficient_balance(price):
             self.amount -= price
@@ -289,14 +435,29 @@ class BoxMoney(models.Model):
         return False
 
     def add_amount(self, amount: int) -> None:
-        """افزایش موجودی کیف پول"""
+        """
+        Increase the user's wallet balance by the given amount using an atomic database update.
+        
+        This performs an atomic F-expression update on the BoxMoney row (by primary key) to add `amount` to the stored balance, avoiding a read-modify-write race. Passing a negative value will decrease the balance.
+        """
         BoxMoney.objects.filter(pk=self.pk).update(amount=F('amount') + amount)
 
     def get_balance(self) -> int:
-        """دریافت موجودی فعلی"""
+        """
+        Return the current wallet balance.
+        
+        Returns:
+            int: The user's current balance.
+        """
         return self.amount
 
     def __str__(self):
+        """
+        Return a concise human-readable representation of the BoxMoney instance.
+        
+        The string includes the associated user's phone number and the current wallet amount in the format:
+        "BoxMoney <phone_number> - <amount>".
+        """
         return f"BoxMoney {self.user.phone_number} - {self.amount}"
 
 class Order(models.Model):
@@ -310,11 +471,25 @@ class Order(models.Model):
 
     def save(self, *args, **kwargs):
         # ساخت خودکار مسیر دانلود
+        """
+        Ensure an order has a download URL before saving.
+        
+        If download_url is empty, sets it to a generated URL using the order's national_code (format:
+        https://api.medogram.ir/order/download/order_{national_code}.pdf), then delegates to the parent save().
+        """
         if not self.download_url:  # اگر مسیر دانلود خالی بود
             self.download_url = f"https://api.medogram.ir/order/download/order_{self.national_code}.pdf"
         super().save(*args, **kwargs)
 
     def __str__(self):
+        """
+        Return a human-readable representation of the Order.
+        
+        Combines the order's first_name and last_name separated by a space.
+        
+        Returns:
+            str: The order's full name in the format "First Last".
+        """
         return f"{self.first_name} {self.last_name}"
     
 
@@ -327,4 +502,10 @@ class APKDownloadStat(models.Model):
     last_download_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
+        """
+        Return a human-readable representation of the APKDownloadStat.
+        
+        Returns:
+            str: A concise string in the format "<key> -> <total>" showing the stat key and its total count.
+        """
         return f"{self.key} -> {self.total}"
