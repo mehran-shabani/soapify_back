@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', default='django-insecure-change-me')
 DEBUG = False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['medogram.ir', 'api.medogram.ir', 'helssa.ir', 'www.medogram.ir', 'django-med.chbk.app']
 # cors --------------------
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
