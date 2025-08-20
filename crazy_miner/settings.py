@@ -146,7 +146,7 @@ DATABASES = {
         "ENGINE": os.getenv("DB_ENGINE", 'django.db.backends.sqlite3'),
 
         # نام پایگاه‌داده
-        "NAME": os.getenv("DB_DATABASE", f'{BASE_DIR}, db.sqlite3'),
+        "NAME": os.getenv("DB_DATABASE", BASE_DIR / 'db.sqlite3'),
 
         # اعتبارسنجی کاربر
         "USER": os.getenv("DB_USERNAME", None),
