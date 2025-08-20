@@ -329,3 +329,87 @@ class APKDownloadStat(models.Model):
 
     def __str__(self):
         return f"{self.key} -> {self.total}"
+
+
+class CrazyMinerPayment(models.Model):
+    """مدل برای ذخیره تراکنش‌های پرداخت CrazyMiner"""
+    
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'در انتظار'),
+        ('processing', 'در حال پردازش'),
+        ('completed', 'تکمیل شده'),
+        ('failed', 'ناموفق'),
+        ('cancelled', 'لغو شده'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='crazyminer_payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=0)  # مبلغ به ریال
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    
+    # فیلدهای مربوط به درگاه پرداخت
+    gateway_transaction_id = models.CharField(max_length=255, blank=True, null=True)
+    gateway_reference_id = models.CharField(max_length=255, blank=True, null=True)
+    gateway_tracking_code = models.CharField(max_length=255, blank=True, null=True)
+    
+    # داده‌های رمزنگاری شده
+    encrypted_user_data = models.TextField(blank=True, help_text="اطلاعات رمزنگاری شده کاربر")
+    
+    # توضیحات و URLs
+    description = models.TextField(blank=True)
+    callback_url = models.URLField(blank=True)
+    redirect_url = models.URLField(blank=True)
+    
+    # زمان‌ها
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "پرداخت CrazyMiner"
+        verbose_name_plural = "پرداخت‌های CrazyMiner"
+    
+    def __str__(self):
+        return f"پرداخت {self.id} - {self.user.phone_number} - {self.amount} ریال - {self.get_status_display()}"
+    
+    def mark_completed(self):
+        """تکمیل تراکنش"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.save()
+    
+    def mark_failed(self):
+        """علامت‌گذاری به عنوان ناموفق"""
+        self.status = 'failed'
+        self.save()
+
+
+class CrazyMinerPaymentLog(models.Model):
+    """لاگ فعالیت‌های پرداخت"""
+    
+    LOG_TYPE_CHOICES = [
+        ('request', 'درخواست پرداخت'),
+        ('callback', 'بازگشت از درگاه'),
+        ('verification', 'تایید پرداخت'),
+        ('user_fetch', 'دریافت اطلاعات کاربر'),
+        ('error', 'خطا'),
+    ]
+    
+    payment = models.ForeignKey(
+        CrazyMinerPayment, 
+        on_delete=models.CASCADE, 
+        related_name='logs'
+    )
+    log_type = models.CharField(max_length=20, choices=LOG_TYPE_CHOICES)
+    message = models.TextField()
+    raw_data = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "لاگ پرداخت"
+        verbose_name_plural = "لاگ‌های پرداخت"
+    
+    def __str__(self):
+        return f"{self.get_log_type_display()} - {self.payment.id} - {self.created_at}"
