@@ -332,7 +332,7 @@ class APKDownloadStat(models.Model):
 
 
 class CrazyMinerPayment(models.Model):
-    """مدل برای ذخیره تراکنش‌های پرداخت CrazyMiner"""
+    """مدل برای ذخیره تراکنش‌های شارژ کیف پول CrazyMiner"""
     
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'در انتظار'),
@@ -342,9 +342,15 @@ class CrazyMinerPayment(models.Model):
         ('cancelled', 'لغو شده'),
     ]
     
+    PAYMENT_TYPE_CHOICES = [
+        ('wallet_charge', 'شارژ کیف پول'),
+        ('service_payment', 'پرداخت خدمات'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='crazyminer_payments')
     amount = models.DecimalField(max_digits=10, decimal_places=0)  # مبلغ به ریال
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default='wallet_charge')
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     
     # فیلدهای مربوط به درگاه پرداخت
@@ -352,11 +358,8 @@ class CrazyMinerPayment(models.Model):
     gateway_reference_id = models.CharField(max_length=255, blank=True, null=True)
     gateway_tracking_code = models.CharField(max_length=255, blank=True, null=True)
     
-    # داده‌های رمزنگاری شده
-    encrypted_user_data = models.TextField(blank=True, help_text="اطلاعات رمزنگاری شده کاربر")
-    
     # توضیحات و URLs
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, default="شارژ کیف پول")
     callback_url = models.URLField(blank=True)
     redirect_url = models.URLField(blank=True)
     
@@ -367,17 +370,36 @@ class CrazyMinerPayment(models.Model):
     
     class Meta:
         ordering = ['-created_at']
-        verbose_name = "پرداخت CrazyMiner"
-        verbose_name_plural = "پرداخت‌های CrazyMiner"
+        verbose_name = "شارژ کیف پول CrazyMiner"
+        verbose_name_plural = "شارژ‌های کیف پول CrazyMiner"
     
     def __str__(self):
-        return f"پرداخت {self.id} - {self.user.phone_number} - {self.amount} ریال - {self.get_status_display()}"
+        return f"شارژ {self.id} - {self.user.phone_number} - {self.amount} ریال - {self.get_status_display()}"
     
     def mark_completed(self):
-        """تکمیل تراکنش"""
-        self.status = 'completed'
-        self.completed_at = timezone.now()
-        self.save()
+        """تکمیل تراکنش و شارژ کیف پول"""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            self.status = 'completed'
+            self.completed_at = timezone.now()
+            self.save()
+            
+            # شارژ کیف پول کاربر
+            box_money, created = BoxMoney.objects.get_or_create(
+                user=self.user,
+                defaults={'balance': 0}
+            )
+            box_money.balance = F('balance') + self.amount
+            box_money.save()
+            
+            # ثبت در جدول Transaction برای سازگاری
+            Transaction.objects.create(
+                user=self.user,
+                amount=self.amount,
+                status='completed',
+                trans_id=self.gateway_reference_id or str(self.id)
+            )
     
     def mark_failed(self):
         """علامت‌گذاری به عنوان ناموفق"""

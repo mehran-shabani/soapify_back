@@ -1,16 +1,16 @@
 """
-Views برای مدیریت پرداخت‌های CrazyMiner
+Views برای مدیریت شارژ کیف پول CrazyMiner
 """
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.utils import timezone
 import logging
 
-from .telemedicin_models import CrazyMinerPayment, CrazyMinerPaymentLog, CustomUser
+from .telemedicin_models import CrazyMinerPayment, CrazyMinerPaymentLog
 from .telemedicine_serializers import (
     CrazyMinerCreatePaymentSerializer,
     CrazyMinerPaymentCallbackSerializer,
@@ -18,14 +18,13 @@ from .telemedicine_serializers import (
     CrazyMinerPaymentStatusSerializer
 )
 from .payment_gateway import crazy_gateway
-from .payment_crypto import crazy_crypto
 
 logger = logging.getLogger(__name__)
 
 
 class CrazyMinerCreatePaymentView(APIView):
-    """ایجاد درخواست پرداخت جدید"""
-    permission_classes = [AllowAny]  # چون user از سیستم دیگر است
+    """ایجاد درخواست شارژ کیف پول"""
+    permission_classes = [IsAuthenticated]
     
     def post(self, request):
         serializer = CrazyMinerCreatePaymentSerializer(data=request.data)
@@ -38,59 +37,32 @@ class CrazyMinerCreatePaymentView(APIView):
         
         validated_data = serializer.validated_data
         amount = validated_data['amount']
-        description = validated_data.get('description', '')
-        user_identifier = validated_data['user_identifier']
+        description = validated_data.get('description', 'شارژ کیف پول')
         
         try:
-            # دریافت اطلاعات کاربر از سرور اصلی
-            user_result = crazy_gateway.get_user_info(user_identifier)
-            
-            if not user_result['success']:
-                logger.error(f"خطا در دریافت اطلاعات کاربر: {user_result.get('error')}")
-                return Response(
-                    {'error': 'خطا در دریافت اطلاعات کاربر'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            user_data = user_result['user_data']
-            
-            # بررسی یا ایجاد کاربر محلی
-            phone_number = user_data.get('phone_number', user_identifier)
-            user, created = CustomUser.objects.get_or_create(
-                phone_number=phone_number,
-                defaults={
-                    'username': user_data.get('username', phone_number),
-                    'email': user_data.get('email', ''),
-                }
-            )
-            
-            if created:
-                logger.info(f"کاربر جدید ایجاد شد: {phone_number}")
-            
             # ایجاد رکورد پرداخت
             payment = CrazyMinerPayment.objects.create(
-                user=user,
+                user=request.user,
                 amount=amount,
                 description=description,
+                payment_type='wallet_charge',
                 status='pending',
                 redirect_url=getattr(settings, 'PAYMENT_REDIRECT_URL', 'https://medogram.ir/payment-redirect/'),
-                encrypted_user_data=user_data.get('encrypted_info', '')
             )
             
             # لاگ ایجاد درخواست
             CrazyMinerPaymentLog.objects.create(
                 payment=payment,
                 log_type='request',
-                message=f'درخواست پرداخت ایجاد شد - مبلغ: {amount} ریال',
-                raw_data={'amount': str(amount), 'user_identifier': user_identifier}
+                message=f'درخواست شارژ کیف پول ایجاد شد - مبلغ: {amount} ریال',
+                raw_data={'amount': str(amount), 'user_id': str(request.user.id)}
             )
             
             # ارسال درخواست به درگاه پرداخت
             gateway_result = crazy_gateway.create_payment_request(
                 amount=amount,
                 order_id=payment.id,
-                redirect_url=payment.redirect_url,
-                user_data={'user_id': str(user.id), 'phone': phone_number}
+                redirect_url=payment.redirect_url
             )
             
             if gateway_result['success']:
