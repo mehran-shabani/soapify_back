@@ -116,3 +116,5 @@ output/
 tmp/
 temp/
 *.tmp
+docs/
+doc/
