@@ -1,30 +1,35 @@
 openapi: 3.0.3
 info:
   title: Helssa Integration API
-  description: 'APIهای یکپارچه‌سازی با سیستم Helssa برای تبادل اطلاعات پزشکی'
+  description: APIهای یکپارچه‌سازی با سیستم Helssa برای تبادل اطلاعات پزشکی
   version: 1.0.0
+  license:
+    name: Proprietary
+  contact:
+    url: https://soapify.com/support
+  termsOfService: https://soapify.com/terms
 servers:
-  - url: http://localhost:8000/api
-    description: Development server
-  - url: https://api.soapify.com/api
-    description: Production server
-
+- url: http://localhost:8000/api
+  description: Development server
+- url: https://api.soapify.com/api
+  description: Production server
 x-metadata:
   type: openapi
-  tags: [stable, active]
+  tags:
+  - stable
+  - active
   capability: integrations
   category: external
-
 paths:
   /integrations/helssa/auth/:
     post:
       summary: احراز هویت Helssa
-      description: 'دریافت توکن برای ارتباط با سیستم Helssa'
+      description: دریافت توکن برای ارتباط با سیستم Helssa
       tags:
-        - Helssa
+      - Helssa
       operationId: authenticateHelssa
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -32,18 +37,18 @@ paths:
             schema:
               type: object
               required:
-                - helssa_username
-                - helssa_password
+              - helssa_username
+              - helssa_password
               properties:
                 helssa_username:
                   type: string
-                  example: 'doctor123'
+                  example: doctor123
                 helssa_password:
                   type: string
                   format: password
                 clinic_code:
                   type: string
-                  example: 'CLN001'
+                  example: CLN001
       responses:
         '200':
           description: احراز هویت موفق
@@ -61,33 +66,40 @@ paths:
                     type: array
                     items:
                       type: string
-
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /integrations/helssa/patients/search/:
     get:
       summary: جستجوی بیمار در Helssa
-      description: 'جستجوی اطلاعات بیمار در سیستم Helssa'
+      description: جستجوی اطلاعات بیمار در سیستم Helssa
       tags:
-        - Helssa
+      - Helssa
       operationId: searchHelssaPatients
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       parameters:
-        - name: national_id
-          in: query
-          description: 'کد ملی بیمار'
-          schema:
-            type: string
-            pattern: '^\d{10}$'
-        - name: phone_number
-          in: query
-          description: 'شماره تلفن'
-          schema:
-            type: string
-        - name: name
-          in: query
-          description: 'نام بیمار'
-          schema:
-            type: string
+      - name: national_id
+        in: query
+        description: کد ملی بیمار
+        schema:
+          type: string
+          pattern: ^\d{10}$
+      - name: phone_number
+        in: query
+        description: شماره تلفن
+        schema:
+          type: string
+      - name: name
+        in: query
+        description: نام بیمار
+        schema:
+          type: string
       responses:
         '200':
           description: نتایج جستجو
@@ -100,7 +112,7 @@ paths:
                   properties:
                     helssa_patient_id:
                       type: string
-                      example: 'HLS123456'
+                      example: HLS123456
                     national_id:
                       type: string
                     full_name:
@@ -114,16 +126,21 @@ paths:
                           type: string
                         policy_number:
                           type: string
-
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /integrations/helssa/encounters/sync/:
     post:
       summary: همگام‌سازی ملاقات
-      description: 'ارسال اطلاعات ملاقات و SOAP به Helssa'
+      description: ارسال اطلاعات ملاقات و SOAP به Helssa
       tags:
-        - Helssa
+      - Helssa
       operationId: syncEncounterToHelssa
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -131,22 +148,25 @@ paths:
             schema:
               type: object
               required:
-                - encounter_id
-                - helssa_patient_id
+              - encounter_id
+              - helssa_patient_id
               properties:
                 encounter_id:
                   type: integer
                   example: 123
                 helssa_patient_id:
                   type: string
-                  example: 'HLS123456'
+                  example: HLS123456
                 include_attachments:
                   type: boolean
                   default: true
-                  description: 'شامل فایل‌های ضمیمه'
+                  description: شامل فایل‌های ضمیمه
                 sync_mode:
                   type: string
-                  enum: [create, update, merge]
+                  enum:
+                  - create
+                  - update
+                  - merge
                   default: create
       responses:
         '200':
@@ -158,13 +178,16 @@ paths:
                 properties:
                   sync_id:
                     type: string
-                    example: 'SYNC_ABC123'
+                    example: SYNC_ABC123
                   helssa_record_id:
                     type: string
-                    example: 'HLS_REC_789'
+                    example: HLS_REC_789
                   status:
                     type: string
-                    enum: [synced, pending, failed]
+                    enum:
+                    - synced
+                    - pending
+                    - failed
                   sync_details:
                     type: object
                     properties:
@@ -175,16 +198,23 @@ paths:
                         type: array
                         items:
                           type: string
-
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /integrations/helssa/prescriptions/send/:
     post:
       summary: ارسال نسخه به Helssa
-      description: 'ارسال نسخه الکترونیک به سیستم Helssa'
+      description: ارسال نسخه الکترونیک به سیستم Helssa
       tags:
-        - Helssa
+      - Helssa
       operationId: sendPrescriptionToHelssa
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -192,8 +222,8 @@ paths:
             schema:
               type: object
               required:
-                - encounter_id
-                - prescription_items
+              - encounter_id
+              - prescription_items
               properties:
                 encounter_id:
                   type: integer
@@ -229,16 +259,23 @@ paths:
                   qr_code:
                     type: string
                     format: base64
-
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /integrations/helssa/status/:
     get:
       summary: وضعیت اتصال
-      description: 'بررسی وضعیت اتصال به سیستم Helssa'
+      description: بررسی وضعیت اتصال به سیستم Helssa
       tags:
-        - Helssa
+      - Helssa
       operationId: getHelssaConnectionStatus
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: وضعیت اتصال
@@ -258,15 +295,71 @@ paths:
                     type: integer
                   service_status:
                     type: string
-                    enum: [operational, degraded, down]
-
+                    enum:
+                    - operational
+                    - degraded
+                    - down
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: ValidationError
+        detail:
+          type: string
+          example: phone_number is required
+        code:
+          type: string
+          example: VALIDATION_ERROR
+  responses:
+    BadRequest:
+      description: درخواست نامعتبر
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: احراز هویت ناموفق
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: دسترسی غیرمجاز
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: یافت نشد
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: تعداد درخواست‌ها بیش از حد مجاز
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
 tags:
-  - name: Helssa
-    description: 'یکپارچه‌سازی با سیستم Helssa'
+- name: Helssa
+  description: یکپارچه‌سازی با سیستم Helssa
