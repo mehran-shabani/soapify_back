@@ -241,9 +241,7 @@ paths:
             schema:
               type: object
               required:
-                - refresh_token
-                - username
-                - password
+                - refresh_token   
               properties:
                 refresh_token:
                   type: string
