@@ -30,6 +30,16 @@ class RegisterOrLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        """
+        Send a one-time authentication code to the provided phone number and create the user if missing.
+        
+        Expects 'phone_number' in request.data. Creates or retrieves a User with that phone number, generates a random 6-digit auth_code, saves it to the user, and attempts to send the code via Kavenegar's verify_lookup (using the 'users' template). Side effects: may create a new User and will update the user's auth_code.
+        
+        Returns:
+        - 200 OK with a success message (Persian) when the SMS was sent.
+        - 400 Bad Request if 'phone_number' is missing.
+        - 500 Internal Server Error if sending the SMS fails.
+        """
         phone_number = request.data.get('phone_number')
 
         if not phone_number:
@@ -71,6 +81,14 @@ class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        """
+        Verify an OTP code for a phone-number user and return JWT tokens on success.
+        
+        Expects 'phone_number' and 'code' in request.data. If the user with the given phone number exists and the provided numeric code matches user.auth_code, issues JWT refresh and access tokens and returns them with HTTP 200. If the code is incorrect returns HTTP 400 with an error message; if no user is found returns HTTP 404.
+        
+        Side effects:
+        - If the user has no Visit records, attempts to send a one-time welcome SMS using Kavenegar. Failures from the SMS API are logged and do not change the HTTP response.
+        """
         phone_number = request.data.get('phone_number')
         code = request.data.get('code')
 
@@ -109,6 +127,17 @@ class CreateTransaction(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
+        """
+        Create a BitPay payment and record a Transaction for the authenticated user.
+        
+        Builds a request to the BitPay gateway using BITPAY_API_KEY and the provided `amount` (expected in request.data['amount']), posts it to the gateway, and on a positive numeric gateway response creates a Transaction tied to request.user and returns a payment URL. On non-positive gateway responses returns a 400 Response with the gateway error text.
+        
+        Notes:
+        - Side effect: creates a Transaction object with fields user, amount, and card_num set to the gateway response.
+        - Input requirement: request.data must include 'amount'.
+        - Successful response: HTTP 200 with {'payment_url': <url>}.
+        - Failure response: HTTP 400 with {'error': <gateway_response>}.
+        """
         payment_data = {
             'api': BITPAY_API_KEY,
             'amount': request.data['amount'],
@@ -132,6 +161,20 @@ class VerifyPaymentView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        """
+        Verify a BitPay payment and update the corresponding Transaction.
+        
+        Expects 'trans_id' and 'id_get' in request.data. Calls BitPay's gateway-result-second API with the API key and the provided identifiers, then:
+        - If the gateway response has status == 1: marks the Transaction with card_num == id_get as successful, sets its factor_id to trans_id, saves it, and returns HTTP 200 with a success message.
+        - If status == 11: returns HTTP 200 indicating the transaction was already verified.
+        - Otherwise: returns HTTP 400 indicating verification failed.
+        
+        Parameters:
+            request (rest_framework.request.Request): request containing 'trans_id' and 'id_get' in its data.
+        
+        Returns:
+            rest_framework.response.Response with status 200 on success or 400 on failure and a JSON message describing the outcome.
+        """
         trans_id = request.data.get('trans_id')
         id_get = request.data.get('id_get')
         if not trans_id or not id_get:
@@ -163,6 +206,14 @@ class CreateVisit(APIView):
     @transaction.atomic
     def post(self, request):
         # بررسی موجودی کیف پول
+        """
+        Create a Visit charged against the authenticated user's wallet.
+        
+        Checks the user's BoxMoney balance (cost = 398000), returns 400 if insufficient. If balance is sufficient, validates VisitSerializer with the request data, deducts the visit cost from the wallet, attempts to save the Visit, and returns a 201 response with the created visit id and serialized data on success. If saving the visit fails, the wallet deduction is reverted and a 400 response with error details is returned. If the serializer is invalid, returns a 400 response with serializer errors.
+        
+        Returns:
+            rest_framework.response.Response: HTTP 201 on success; 400 for validation errors, insufficient funds, or save failure.
+        """
         box_money = BoxMoney.objects.select_for_update().get(user=request.user)
         visit_cost = 398000
         if not box_money.has_sufficient_balance(visit_cost):
@@ -203,6 +254,11 @@ class CreateVisit(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def get(self, request):
+        """
+        Retrieve the authenticated user's visits ordered newest-first.
+        
+        Returns a 200 OK Response containing a list of VisitSerializer-serialized visit objects for request.user, ordered by descending creation time. The serializer is given the current request in its context.
+        """
         visits = Visit.objects.filter(user=request.user).order_by('-created_at')
         serializer = VisitSerializer(visits, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -211,6 +267,11 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        Return the authenticated user's profile.
+        
+        Serializes the current request.user with CustomUserProfileSerializer and returns the serialized data in a 200 OK Response.
+        """
         serializer = CustomUserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -219,6 +280,15 @@ class UserProfileUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        """
+        Partially update the authenticated user's profile.
+        
+        Accepts partial profile fields in the request body, validates them using CustomUserProfileSerializer,
+        and saves changes on success.
+        
+        Returns:
+            rest_framework.response.Response: 201 with serialized user data on success; 400 with serializer errors on validation failure.
+        """
         serializer = CustomUserProfileSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -229,6 +299,15 @@ class BlogListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        """
+        Return a serialized list of all Blog objects.
+        
+        Retrieves every Blog from the database, serializes them with BlogSerializer (many=True),
+        and returns a DRF Response containing the serialized list with HTTP 200 OK.
+        
+        Returns:
+            rest_framework.response.Response: JSON array of serialized blogs with status 200.
+        """
         blogs = Blog.objects.all()
         serializer = BlogSerializer(blogs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -238,6 +317,20 @@ class BlogCommentsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, blog_id):
+        """
+        Create a comment on the specified blog.
+        
+        Validates incoming comment data, saves a new Comment linked to the Blog identified by blog_id and the requesting user, and returns the serialized comment on success.
+        
+        Parameters:
+            blog_id (int): Primary key of the Blog to attach the comment to.
+        
+        Returns:
+            Response: HTTP 201 with serialized comment on success, or HTTP 400 with serializer errors on validation failure.
+        
+        Raises:
+            Http404: If no Blog exists with the provided blog_id.
+        """
         blog = get_object_or_404(Blog, pk=blog_id)
         serializer = CommentSerializer(data=request.data)
         if serializer.is_valid():
@@ -250,6 +343,21 @@ class CommentLikeDislikeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, comment_id, actions):
+        """
+        Increment or decrement a comment's like count based on the requested action and return the updated count.
+        
+        If `actions` is 'like' the comment's likes are incremented by 1. If `actions` is 'dislike' the likes are decremented by 1 but never below 0. The comment is saved and a JSON Response with a status 200 is returned containing a message and the current like count.
+        
+        Parameters:
+            comment_id (int): Primary key of the Comment to modify.
+            actions (str): Either 'like' or 'dislike' — determines whether to increment or decrement likes.
+        
+        Returns:
+            rest_framework.response.Response: HTTP 200 with payload {'message': '<Action> added', 'likes': <int>}.
+        
+        Raises:
+            Http404: If no Comment with the given `comment_id` exists.
+        """
         comment = get_object_or_404(Comment, id=comment_id)
         if actions == 'like':
             comment.likes += 1
@@ -263,6 +371,11 @@ class ShowBoxMoneyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        """
+        Return the authenticated user's wallet (BoxMoney) data.
+        
+        Serializes the BoxMoney tied to request.user and returns it as a 200 OK JSON response.
+        """
         box_money = BoxMoney.objects.get(user=request.user)
         serializer = BoxMoneySerializer(box_money)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -274,6 +387,11 @@ class DownloadAPKView(APIView):
 
     def get(self, request, *args, **kwargs):
         # مسیر فایل APK نسبت به همین اپ
+        """
+        Serve the APK file for download, emit a download-count signal, and include a download-count header.
+        
+        Looks for the APK at path relative to this module: 'apps/app-release.apk'. If the file does not exist, returns a 404 Response with an error message. When the file exists, sends the `apk_downloaded` signal (used only to record/count the event), returns a FileResponse that forces download with the filename "helssa.apk", and sets "Cache-Control: no-store" to discourage client/proxy caching. If an APKDownloadStat with key "helssa_apk" exists, its total is added to the response header "X-Helssa-Downloads" (otherwise that header is "0").
+        """
         current_directory = os.path.dirname(__file__)
         file_path = os.path.join(current_directory, 'apps', 'app-release.apk')
 
@@ -305,6 +423,22 @@ class CreateSuperVisit(APIView):
     @transaction.atomic
     def post(self, request, cost):
         # بررسی موجودی کیف پول
+        """
+        Create a Visit charging the authenticated user's wallet for a specified cost.
+        
+        Validates incoming visit data with VisitSerializer, ensures the requesting user's BoxMoney has at least `cost`, deducts `cost` before saving the Visit, and restores the deducted amount if saving fails.
+        
+        Parameters:
+            request: DRF Request containing visit payload; serializer is constructed with this request in context.
+            cost (int|float): Amount to charge from the user's BoxMoney before creating the Visit.
+        
+        Returns:
+            rest_framework.response.Response:
+                - 201 Created with a JSON payload containing 'message', 'visit_id', and 'visit_data' on success.
+                - 400 Bad Request with serializer errors if validation fails.
+                - 400 Bad Request with an 'error' and 'details' if saving the Visit raises an exception.
+                - 400 Bad Request with an 'error' if the user's wallet balance is insufficient.
+        """
         box_money = BoxMoney.objects.select_for_update().get(user=request.user)
 
         if box_money.amount < cost:
@@ -344,6 +478,12 @@ class UserProfileViewJustUserName(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        Return the authenticated user's profile containing only the username.
+        
+        Returns:
+            Response: HTTP 200 with serialized user data limited to the username field.
+        """
         serializer = CustomUserProfileJustUserNameSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
         
@@ -351,6 +491,11 @@ class UserProfileUpdateViewJustUserName(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        """
+        Partially updates the current user's username fields using CustomUserProfileJustUserNameSerializer.
+        
+        Expects request.data to contain the username fields handled by the serializer. On successful validation and save returns HTTP 201 with the serialized user data; on validation failure returns HTTP 400 with serializer errors.
+        """
         serializer = CustomUserProfileJustUserNameSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -363,6 +508,19 @@ class UserProfileUpdateViewJustUserName(APIView):
 
 
 def order_verification(request, national_code):
+    """
+    Render an order verification page for a given national_code.
+    
+    If an Order with the provided national_code exists, the template receives {'order': order, 'not_found': False}.
+    If no matching Order exists, the template receives {'not_found': True, 'national_code': national_code}.
+    
+    Parameters:
+        request: HttpRequest object for the incoming request.
+        national_code (str): The national identifier used to look up the Order.
+    
+    Returns:
+        HttpResponse: Rendered 'telemedicine/verification_order.html' with the context described above.
+    """
     try:
         order = Order.objects.get(national_code=national_code)
         context = {'order': order, 'not_found': False}
@@ -376,6 +534,22 @@ class download_order_file(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, national_code):
+        """
+        Serve the PDF invoice for an Order identified by national_code as a downloadable file.
+        
+        If an Order with the given national_code exists, returns a FileResponse streaming
+        MEDIA_ROOT/pdf/order/order_<national_code>.pdf with an attachment filename
+        "order_<national_code>.pdf". If the file is missing or the Order does not exist,
+        an HTTP 404 response is returned.
+        
+        Parameters:
+            request: Django HttpRequest (unused).
+            national_code (str): The national code used to look up the Order and build the PDF filename.
+        
+        Returns:
+            FileResponse: Streaming response of the order PDF when found.
+            rest_framework.response.Response: 404 JSON response if the order or file is not found.
+        """
         order = get_object_or_404(Order, national_code=national_code)
         if order:
             file_path = os.path.join(settings.MEDIA_ROOT, 'pdf', 'order', f'order_{national_code}.pdf')
