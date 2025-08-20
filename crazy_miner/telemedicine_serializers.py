@@ -61,16 +61,11 @@ class VisitSerializer(serializers.ModelSerializer):
 
     def validate_image_size(self, value):
         """
-        Validate that an uploaded file's size does not exceed the configured MAX_UPLOAD_SIZE.
+        Validate that an uploaded file does not exceed settings.MAX_UPLOAD_SIZE.
         
-        Raises a serializers.ValidationError with a localized message if the file's size in bytes
-        is greater than settings.MAX_UPLOAD_SIZE.
-        
-        Parameters:
-            value: UploadedFile-like object with a `.size` attribute (e.g., an ImageField file).
-        
-        Raises:
-            serializers.ValidationError: when value.size > settings.MAX_UPLOAD_SIZE.
+        If the file-like `value` has a `.size` greater than settings.MAX_UPLOAD_SIZE, raises
+        serializers.ValidationError with a Persian message indicating the maximum allowed size.
+        `value` is expected to be an UploadedFile-like object (e.g., an ImageField file).
         """
         if value.size > settings.MAX_UPLOAD_SIZE:
             raise serializers.ValidationError(
@@ -83,12 +78,12 @@ class VisitSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """
-        Create a Visit instance after assigning the currently authenticated request user.
+        Create and return a Visit instance after assigning the currently authenticated request user.
         
-        This method injects the request user into validated_data['user'] and delegates instance creation to the parent serializer.
+        This injects the authenticated user from self.context['request'].user into validated_data['user'] before delegating creation to the superclass.
         
         Parameters:
-            validated_data (dict): Serializer-validated data for the Visit (user will be populated).
+            validated_data (dict): Serializer-validated data for the Visit; the 'user' key will be set.
         
         Returns:
             Visit: The newly created Visit model instance.

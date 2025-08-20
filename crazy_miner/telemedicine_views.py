@@ -82,12 +82,12 @@ class VerifyOTPView(APIView):
 
     def post(self, request):
         """
-        Verify an OTP code for a phone-number user and return JWT tokens on success.
+        Verify a one-time password (OTP) for a user's phone number and return JWT tokens on success.
         
-        Expects 'phone_number' and 'code' in request.data. If the user with the given phone number exists and the provided numeric code matches user.auth_code, issues JWT refresh and access tokens and returns them with HTTP 200. If the code is incorrect returns HTTP 400 with an error message; if no user is found returns HTTP 404.
+        Expects 'phone_number' and 'code' in request.data. If a User with the given phone number exists and the numeric code matches user.auth_code, issues JWT refresh and access tokens and returns them in a 200 response. If the code is incorrect, returns a 400 response with an error message; if no user is found, returns a 404 response.
         
         Side effects:
-        - If the user has no Visit records, attempts to send a one-time welcome SMS using Kavenegar. Failures from the SMS API are logged and do not change the HTTP response.
+        - If the user has no Visit records, attempts to send a one-time welcome SMS via Kavenegar using the 'first-log' template. Failures from the SMS API are caught and logged and do not affect the HTTP response.
         """
         phone_number = request.data.get('phone_number')
         code = request.data.get('code')
@@ -128,15 +128,19 @@ class CreateTransaction(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-        Create a BitPay payment and record a Transaction for the authenticated user.
+        Create a BitPay payment gateway request and record a Transaction for the authenticated user.
         
-        Builds a request to the BitPay gateway using BITPAY_API_KEY and the provided `amount` (expected in request.data['amount']), posts it to the gateway, and on a positive numeric gateway response creates a Transaction tied to request.user and returns a payment URL. On non-positive gateway responses returns a 400 Response with the gateway error text.
+        Expects request.data['amount'] to be provided. Sends a POST to the BitPay gateway with the API key and amount; if the gateway returns a positive numeric id, creates a Transaction linked to request.user (amount and card_num set to the gateway id) and returns HTTP 200 with {'payment_url': <url>}. If the gateway response is non-positive, returns HTTP 400 with {'error': <gateway_response>}.
         
-        Notes:
-        - Side effect: creates a Transaction object with fields user, amount, and card_num set to the gateway response.
-        - Input requirement: request.data must include 'amount'.
-        - Successful response: HTTP 200 with {'payment_url': <url>}.
-        - Failure response: HTTP 400 with {'error': <gateway_response>}.
+        Side effects:
+        - Creates a Transaction record when the gateway returns a positive id.
+        
+        Input:
+        - request.data['amount']: monetary amount to charge.
+        
+        Returns:
+        - HTTP 200: {'payment_url': <str>}
+        - HTTP 400: {'error': <str>} (gateway error text)
         """
         payment_data = {
             'api': BITPAY_API_KEY,
@@ -162,18 +166,18 @@ class VerifyPaymentView(APIView):
 
     def post(self, request):
         """
-        Verify a BitPay payment and update the corresponding Transaction.
+        Verify a BitPay payment using provided identifiers and update the matching Transaction record.
         
-        Expects 'trans_id' and 'id_get' in request.data. Calls BitPay's gateway-result-second API with the API key and the provided identifiers, then:
-        - If the gateway response has status == 1: marks the Transaction with card_num == id_get as successful, sets its factor_id to trans_id, saves it, and returns HTTP 200 with a success message.
-        - If status == 11: returns HTTP 200 indicating the transaction was already verified.
+        Expects 'trans_id' and 'id_get' in request.data. Calls BitPay's gateway-result-second endpoint with the API key and the provided identifiers and interprets the JSON response:
+        - If response 'status' == 1: finds the Transaction with card_num == id_get, sets its status to 'successful', sets factor_id to trans_id, saves the Transaction, and returns HTTP 200 with a success message.
+        - If response 'status' == 11: returns HTTP 200 indicating the transaction was already verified.
         - Otherwise: returns HTTP 400 indicating verification failed.
         
         Parameters:
-            request (rest_framework.request.Request): request containing 'trans_id' and 'id_get' in its data.
+            request: DRF Request containing 'trans_id' and 'id_get' in request.data.
         
         Returns:
-            rest_framework.response.Response with status 200 on success or 400 on failure and a JSON message describing the outcome.
+            rest_framework.response.Response with HTTP 200 on success (or already-verified) or HTTP 400 on failure.
         """
         trans_id = request.data.get('trans_id')
         id_get = request.data.get('id_get')
@@ -283,11 +287,8 @@ class UserProfileUpdateView(APIView):
         """
         Partially update the authenticated user's profile.
         
-        Accepts partial profile fields in the request body, validates them using CustomUserProfileSerializer,
-        and saves changes on success.
-        
-        Returns:
-            rest_framework.response.Response: 201 with serialized user data on success; 400 with serializer errors on validation failure.
+        Validates provided fields with CustomUserProfileSerializer (partial=True) and saves on success.
+        Returns HTTP 201 with the serialized user on success or HTTP 400 with serializer errors on validation failure.
         """
         serializer = CustomUserProfileSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
@@ -344,16 +345,13 @@ class CommentLikeDislikeView(APIView):
 
     def post(self, request, comment_id, actions):
         """
-        Increment or decrement a comment's like count based on the requested action and return the updated count.
+        Increment or decrement a comment's like count and return the updated count.
         
-        If `actions` is 'like' the comment's likes are incremented by 1. If `actions` is 'dislike' the likes are decremented by 1 but never below 0. The comment is saved and a JSON Response with a status 200 is returned containing a message and the current like count.
+        If `actions` == 'like', increments the comment's `likes` by 1. If `actions` == 'dislike', decrements `likes` by 1 but never below 0. Persists the change and returns an HTTP 200 response with a message and the current like count.
         
         Parameters:
             comment_id (int): Primary key of the Comment to modify.
-            actions (str): Either 'like' or 'dislike' — determines whether to increment or decrement likes.
-        
-        Returns:
-            rest_framework.response.Response: HTTP 200 with payload {'message': '<Action> added', 'likes': <int>}.
+            actions (str): 'like' or 'dislike' indicating the operation.
         
         Raises:
             Http404: If no Comment with the given `comment_id` exists.
@@ -424,20 +422,19 @@ class CreateSuperVisit(APIView):
     def post(self, request, cost):
         # بررسی موجودی کیف پول
         """
-        Create a Visit charging the authenticated user's wallet for a specified cost.
+        Create a Visit and charge the authenticated user's BoxMoney.
         
-        Validates incoming visit data with VisitSerializer, ensures the requesting user's BoxMoney has at least `cost`, deducts `cost` before saving the Visit, and restores the deducted amount if saving fails.
+        Validates incoming visit data with VisitSerializer, ensures the requesting user's BoxMoney has at least `cost`, deducts `cost` from the wallet before attempting to save the Visit, and restores the deducted amount if saving fails. Operates within a transactional context (the caller uses select_for_update on BoxMoney) to prevent concurrent balance races.
         
         Parameters:
-            request: DRF Request containing visit payload; serializer is constructed with this request in context.
-            cost (int|float): Amount to charge from the user's BoxMoney before creating the Visit.
+            cost (int | float): Amount to charge from the user's BoxMoney (same currency/units used by BoxMoney.amount).
         
         Returns:
             rest_framework.response.Response:
-                - 201 Created with a JSON payload containing 'message', 'visit_id', and 'visit_data' on success.
-                - 400 Bad Request with serializer errors if validation fails.
-                - 400 Bad Request with an 'error' and 'details' if saving the Visit raises an exception.
-                - 400 Bad Request with an 'error' if the user's wallet balance is insufficient.
+                - 201 Created: {'message', 'visit_id', 'visit_data'} when the visit is created successfully.
+                - 400 Bad Request: serializer errors when input validation fails.
+                - 400 Bad Request: {'error': 'خطا در ثبت ویزیت', 'details': <str>} if saving the Visit raises an exception (the deducted amount is restored).
+                - 400 Bad Request: {'error': 'موجودی کیف پول شما برای این ویزیت کافی نیست.'} if the wallet balance is insufficient.
         """
         box_money = BoxMoney.objects.select_for_update().get(user=request.user)
 
@@ -509,17 +506,14 @@ class UserProfileUpdateViewJustUserName(APIView):
 
 def order_verification(request, national_code):
     """
-    Render an order verification page for a given national_code.
+    Render the order verification page for a given national code.
     
-    If an Order with the provided national_code exists, the template receives {'order': order, 'not_found': False}.
-    If no matching Order exists, the template receives {'not_found': True, 'national_code': national_code}.
-    
-    Parameters:
-        request: HttpRequest object for the incoming request.
-        national_code (str): The national identifier used to look up the Order.
+    Looks up an Order by national_code and renders 'telemedicine/verification_order.html'.
+    If found, context contains {'order': order, 'not_found': False}; if not found, context contains
+    {'not_found': True, 'national_code': national_code}.
     
     Returns:
-        HttpResponse: Rendered 'telemedicine/verification_order.html' with the context described above.
+        HttpResponse: Rendered verification page.
     """
     try:
         order = Order.objects.get(national_code=national_code)
@@ -535,20 +529,20 @@ class download_order_file(APIView):
 
     def get(self, request, national_code):
         """
-        Serve the PDF invoice for an Order identified by national_code as a downloadable file.
+        Return the PDF invoice for the Order identified by national_code as a downloadable file.
         
-        If an Order with the given national_code exists, returns a FileResponse streaming
-        MEDIA_ROOT/pdf/order/order_<national_code>.pdf with an attachment filename
-        "order_<national_code>.pdf". If the file is missing or the Order does not exist,
-        an HTTP 404 response is returned.
+        Looks up the Order by national_code (raises Http404 if not found) and returns a FileResponse streaming
+        MEDIA_ROOT/pdf/order/order_<national_code>.pdf with attachment filename "order_<national_code>.pdf".
         
         Parameters:
             request: Django HttpRequest (unused).
-            national_code (str): The national code used to look up the Order and build the PDF filename.
+            national_code (str): National code used to find the Order and build the PDF filename.
         
         Returns:
-            FileResponse: Streaming response of the order PDF when found.
-            rest_framework.response.Response: 404 JSON response if the order or file is not found.
+            FileResponse: Streaming response with the order PDF as an attachment.
+        
+        Raises:
+            django.http.Http404: If no Order with the given national_code exists.
         """
         order = get_object_or_404(Order, national_code=national_code)
         if order:

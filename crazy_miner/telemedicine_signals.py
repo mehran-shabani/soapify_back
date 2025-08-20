@@ -27,11 +27,11 @@ TOPUP_AMOUNT = 300000   #
 @receiver(pre_save, sender=User)
 def set_username_to_phone(sender, instance, **kwargs):
     """
-    Ensure a User instance has a username by copying its phone_number when username is empty.
+    Set a User.username to the user's phone_number when username is empty.
     
-    When run (typically as a pre_save signal receiver for the User model), if the instance has no `username`
-    and has a `phone_number` attribute with a truthy value, this mutates `instance.username` to the
-    string form of `phone_number` before the instance is saved.
+    When used as a pre-save hook, if the User instance has no `username` and has a truthy
+    `phone_number` attribute, this assigns `instance.username = str(instance.phone_number)`
+    so the change is persisted when the instance is saved.
     """
     if not instance.username and getattr(instance, "phone_number", None):
         instance.username = str(instance.phone_number)
@@ -44,13 +44,15 @@ def set_username_to_phone(sender, instance, **kwargs):
 @receiver(post_save, sender=User)
 def init_wallet_and_send_welcome_sms(sender, instance, created, **kwargs):
     """
-    Create a BoxMoney wallet for a newly created user with the configured TOPUP_AMOUNT.
+    Create an initial BoxMoney wallet for a newly created User.
     
-    This receiver runs on User post-save and, only when `created` is True, creates a BoxMoney record for `instance` with amount equal to TOPUP_AMOUNT.
+    Runs on the User post-save signal. If `created` is True, creates a BoxMoney record
+    linked to `instance` with amount set to TOPUP_AMOUNT. Does nothing when `created` is False.
+    Note: despite the function name, this implementation only creates the wallet and does not send an SMS.
     
     Parameters:
         instance (User): The User instance that was saved.
-        created (bool): True if the User was just created; handler does nothing when False.
+        created (bool): True when the User was newly created; handler is a no-op otherwise.
     """
     if not created:  # فقط در اولین ایجاد
         return
@@ -143,12 +145,9 @@ apk_downloaded = Signal()
 def on_apk_downloaded(sender, **kwargs):
     # اگر ردیف وجود ندارد، بساز
     """
-    Handle an APK download signal by ensuring a stat record exists and atomically recording the download.
+    Record an APK download by ensuring a stat row exists and atomically updating its counters.
     
-    Ensures an APKDownloadStat row with key "helssa_apk" exists (creating it if missing), then atomically increments its `total` counter by 1 and sets `last_download_at` to the current time.
-    
-    Parameters:
-        sender: The signal sender (unused).
+    Ensures an APKDownloadStat with key "helssa_apk" exists (creating it if missing), then atomically increments its `total` by 1 and sets `last_download_at` to the current time.
     """
     APKDownloadStat.objects.get_or_create(key="helssa_apk")
     # افزایش اتمیک و ثبت زمان آخرین دانلود
