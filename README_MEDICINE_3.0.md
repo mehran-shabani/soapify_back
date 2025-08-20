@@ -1,7 +1,7 @@
 # SOAPify - پلتفرم هوشمند پزشکی 3.0
 
 <div align="center">
-  <img src="images/logo.svg" alt="SOAPify Logo" width="200"/>
+  <img src="images/soapify_logo.svg" alt="SOAPify Logo" width="200"/>
   
   **نسل جدید مستندسازی و مدیریت هوشمند پزشکی**
   
