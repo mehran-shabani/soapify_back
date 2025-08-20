@@ -353,6 +353,10 @@ class CrazyMinerPayment(models.Model):
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default='wallet_charge')
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     
+    # تشخیص پرداخت برای SOAPify
+    is_soapify = models.BooleanField(default=False, help_text="آیا این پرداخت برای SOAPify است؟")
+    soapify_user_id = models.CharField(max_length=255, blank=True, help_text="ID کاربر در SOAPify")
+    
     # فیلدهای مربوط به درگاه پرداخت
     gateway_transaction_id = models.CharField(max_length=255, blank=True, null=True)
     gateway_reference_id = models.CharField(max_length=255, blank=True, null=True)

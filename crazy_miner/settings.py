@@ -290,8 +290,18 @@ PAYMENT_GATEWAY_URL = os.getenv('PAYMENT_GATEWAY_URL', 'https://api.medogram.ir'
 PAYMENT_API_KEY = os.getenv('PAYMENT_API_KEY', '')  # باید در محیط تنظیم شود
 PAYMENT_REDIRECT_URL = os.getenv('PAYMENT_REDIRECT_URL', 'https://medogram.ir/payment-redirect/')
 
-# Logging for payment
+# SOAPify Integration Settings
+SOAPIFY_API_URL = os.getenv('SOAPIFY_API_URL', 'http://localhost:8000/api')
+SOAPIFY_API_KEY = os.getenv('SOAPIFY_API_KEY', '')
+SOAPIFY_USE_DIRECT_DB = os.getenv('SOAPIFY_USE_DIRECT_DB', 'True').lower() in ('true', '1', 'yes')
+
+# Logging for payment and patient access
 LOGGING['loggers']['crazy_miner.payment'] = {
+    'handlers': ['console', 'file'],
+    'level': 'INFO',
+    'propagate': True,
+}
+LOGGING['loggers']['crazy_miner.patient_access'] = {
     'handlers': ['console', 'file'],
     'level': 'INFO',
     'propagate': True,
