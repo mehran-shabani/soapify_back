@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, UserSession
+from .models import User, UserSession, PhoneVerification
 
 class UserAdmin(admin.ModelAdmin):
     list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'role', 'phone_number', 'updated_at')
@@ -57,5 +57,14 @@ class UserSessionAdmin(admin.ModelAdmin):
         (None, {'classes': ('wide',), 'fields': ('user', 'session_token', 'created_at', 'expires_at', 'is_active')}),
     )
 
+class PhoneVerificationAdmin(admin.ModelAdmin):
+    list_display = ('phone_number', 'code', 'purpose', 'is_used', 'created_at')
+    search_fields = ('phone_number', 'code')
+    list_filter = ('purpose', 'is_used', 'created_at')
+    list_per_page = 25
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at',)
+
 admin.site.register(User, UserAdmin)
 admin.site.register(UserSession, UserSessionAdmin)
+admin.site.register(PhoneVerification, PhoneVerificationAdmin)
