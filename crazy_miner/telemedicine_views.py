@@ -42,7 +42,7 @@ class RegisterOrLoginView(APIView):
 
         # Generate a random 6-digit authentication code
         code = random.randint(100000, 999999)
-        user.auth_code = str(code)
+        user.auth_code = code
         user.save(update_fields=['auth_code'])
 
         # Send SMS with the authentication code
