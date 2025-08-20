@@ -142,19 +142,34 @@ class CreateTransaction(APIView):
             'api': BITPAY_API_KEY,
             'amount': request.data['amount'],
             'redirect': 'https://medogram.ir/payment-redirect/',
-        }
-        response = requests.post('https://bitpay.ir/payment/gateway-send', data=payment_data)
-        id_get = response.text
-        if int(id_get) > 0:
-            transaction = Transaction.objects.create(
-                user=request.user,
-                amount=request.data['amount'],
-                card_num=id_get
-            )
-            payment_url = f"https://bitpay.ir/payment/gateway-{id_get}-get"
-            return Response({'payment_url': payment_url}, status=status.HTTP_200_OK)
-        else:
-            return Response({'error': 'Error from BitPay: ' + id_get}, status=status.HTTP_400_BAD_REQUEST)
+        })
+      -        response = requests.post('https://bitpay.ir/payment/gateway-result-second', data=verify_data)
+-        result = response.json()
+-        if result.get('status') == 1:
+-            transaction = Transaction.objects.get(card_num=id_get)
+-            transaction.status = 'successful'
+-            transaction.factor_id = trans_id
+-            transaction.save()
++        try:
++            r = requests.post(
++                'https://bitpay.ir/payment/gateway-result-second',
++                data=verify_data,
++                timeout=10,
++            )
++            r.raise_for_status()
++            result = r.json()
++        except (requests.RequestException, ValueError) as exc:
++            return Response({'error': f'Payment verification error: {exc}'},
++                            status=status.HTTP_502_BAD_GATEWAY)
++        if result.get('status') == 1:
++            try:
++                transaction = Transaction.objects.get(trans_id=id_get)
++            except Transaction.DoesNotExist:
++                return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
++            transaction.status = 'successful'
++            transaction.factor_id = trans_id
++            transaction.save(update_fields=['status', 'factor_id'])
+             return Response({'message': 'Payment verified successfully'}, status=status.HTTP_200_OK)
 
 
 class VerifyPaymentView(APIView):
