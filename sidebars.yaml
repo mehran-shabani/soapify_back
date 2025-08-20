@@ -1,0 +1,140 @@
+- group: Fast Starter
+  items:
+    - page: Introduction
+      link: /introduction/
+    - page: Getting Started
+      link: /getting-started/
+    - page: Authentication
+      link: /authentication/
+      items:
+        - page: Phone Registration
+          link: /authentication/phone-registration/
+        - page: OTP Login
+          link: /authentication/otp-login/
+        - page: Manage JWT Tokens
+          link: /authentication/jwt-tokens/
+
+- group: Main API
+  items:
+    - page: Manage Visits
+      link: /core/encounters/
+      items:
+        - page: Create Visit
+          link: /core/encounters/create/
+        - page: Search & Filtering
+          link: /core/encounters/search/
+        - page: Update Visit Status
+          link: /core/encounters/status/
+    
+    - page: Sound Processing (STT)
+      link: /core/stt/
+      items:
+        - page: Start Recording
+          link: /core/stt/recording/
+        - page: Upload Audio File
+          link: /core/stt/upload/
+        - page: Retrieve Transcription
+          link: /core/stt/transcription/
+    
+    - page: Text Processing (NLP)
+      link: /core/nlp/
+      items:
+        - page: Generate SOAP Draft
+          link: /core/nlp/generate-draft/
+        - page: Information Extraction
+          link: /core/nlp/extraction/
+        - page: Sentiment Analysis
+          link: /core/nlp/sentiment/
+
+- group: Advanced Features
+  items:
+    - page: Dynamic Checklists
+      link: /features/checklists/
+      items:
+        - page: Checklist Templates
+          link: /features/checklists/templates/
+        - page: Evaluation & Scoring
+          link: /features/checklists/evaluation/
+    
+    - page: Advanced Search
+      link: /features/search/
+      items:
+        - page: Semantic Search
+          link: /features/search/semantic/
+        - page: Combined Filters
+          link: /features/search/filters/
+    
+    - page: Outputs & Reports
+      link: /features/outputs/
+      items:
+        - page: Output Templates
+          link: /features/outputs/templates/
+        - page: Export PDF/DOCX
+          link: /features/outputs/export/
+        - page: Secure Sharing
+          link: /features/outputs/sharing/
+
+- group: Integrations
+  items:
+    - page: Helssa Integration
+      link: /integrations/helssa/
+      items:
+        - page: Initial Setup
+          link: /integrations/helssa/setup/
+        - page: Data Synchronization
+          link: /integrations/helssa/sync/
+        - page: Error Management
+          link: /integrations/helssa/errors/
+    
+    - page: Webhooks
+      link: /integrations/webhooks/
+      items:
+        - page: Configuration
+          link: /integrations/webhooks/configuration/
+        - page: Supported Events
+          link: /integrations/webhooks/events/
+        - page: Security & Signatures
+          link: /integrations/webhooks/security/
+
+- group: Management & Analytics
+  items:
+    - page: Analytics Dashboard
+      link: /analytics/dashboard/
+    - page: Performance Reports
+      link: /analytics/reports/
+    - page: User Management
+      link: /admin/users/
+    - page: System Settings
+      link: /admin/settings/
+
+- group: Developer Guide
+  items:
+    - page: Development Environment
+      link: /development/environment/
+    - page: Code Examples
+      link: /development/examples/
+      items:
+        - page: Python
+          link: /development/examples/python/
+        - page: JavaScript / Node.js
+          link: /development/examples/javascript/
+        - page: PHP
+          link: /development/examples/php/
+        - page: C# / .NET
+          link: /development/examples/csharp/
+    
+    - page: SDKs
+      link: /development/sdks/
+    - page: Best Practices
+      link: /development/best-practices/
+
+- group: Support
+  items:
+    - page: FAQ
+      link: /support/faq/
+    - page: Troubleshooting
+      link: /support/troubleshooting/
+    - page: Rate Limits
+      link: /support/rate-limits/
+    - page: Contact Support
+      link: /support/contact/

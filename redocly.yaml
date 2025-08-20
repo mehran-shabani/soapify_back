@@ -1,0 +1,107 @@
+# Redocly Configuration for SOAPify API Documentation
+logo:
+  image: ./images/logo.svg
+  altText: SOAPify - Medical Documentation Platform
+
+# Classic Catalog Configuration
+catalogClassic:
+  api-catalog:
+    title: کاتالوگ APIهای SOAPify
+    description: 'مرور و دسترسی به APIهای مختلف پلتفرم مستندسازی پزشکی SOAPify'
+    slug: /apis/
+    
+    # اقلام کاتالوگ
+    items:
+      - directory: ./apis
+        flatten: true
+        includeByMetadata:
+          type: [openapi]
+    
+    # فیلترهای کاتالوگ
+    filters:
+      - title: حوزه عملکرد
+        property: capability
+        missingCategoryName: سایر
+        type: select
+      
+      - title: وضعیت توسعه
+        property: tags
+        options: [beta, draft, stable, deprecated, active]
+        type: checkboxes
+      
+      - title: دسته‌بندی
+        property: category
+        missingCategoryName: عمومی
+        type: select
+
+# Navigation Configuration
+navbar:
+  items:
+    - page: صفحه اصلی
+    - page: /apis/
+      label: کاتالوگ APIها
+    - page: راهنمای شروع
+    - page: احراز هویت
+    - group: مستندات
+      items:
+        - page: نمای کلی
+        - page: معماری سیستم
+        - page: نمونه کدها
+    - page: تماس با ما
+
+# Footer Configuration
+footer:
+  copyrightText: Copyright © 2024 SOAPify. تمامی حقوق محفوظ است.
+  items:
+    - group: محصول
+      items:
+        - page: ویژگی‌ها
+        - page: قیمت‌گذاری
+        - page: نقشه راه
+    - group: توسعه‌دهندگان
+      items:
+        - page: API Reference
+        - page: SDKs
+        - page: وب‌هوک‌ها
+    - group: پشتیبانی
+      items:
+        - page: مرکز راهنما
+        - page: گزارش مشکل
+
+# RBAC Configuration (Role-Based Access Control)
+rbac:
+  content:
+    /apis/admin/:
+      admin: read
+    /apis/internal/:
+      developer: read
+      admin: read
+
+# Search Configuration
+search:
+  shortcuts:
+    - 'Ctrl+K'
+    - 'Cmd+K'
+
+# SEO Configuration
+seo:
+  title: SOAPify API Documentation
+  description: مستندات جامع APIهای پلتفرم مستندسازی پزشکی SOAPify
+  keywords:
+    - SOAPify
+    - Medical Documentation
+    - Healthcare API
+    - SOAP Notes
+    - مستندسازی پزشکی
+    - API پزشکی
+
+# API Configuration
+apis:
+  auth-api:
+    root: ./apis/auth/auth-api.yaml
+  main-api:
+    root: ./apis/soapify-main-api.yaml
+  analytics-api:
+    root: ./apis/analytics/analytics-api.yaml
+  helssa-api:
+    root: ./apis/integrations/helssa-api.yaml

@@ -1,0 +1,545 @@
+{
+  "info": {
+    "name": "SOAPify API v1.0",
+    "description": "Complete API collection for SOAPify medical documentation platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.soapify.com",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "encounter_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"session_id\", response.data.session_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"phone_number\": \"+989123456789\",\n    \"purpose\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/otp/send/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "otp", "send", ""]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"jwt_token\", response.data.jwt_token);",
+                  "pm.collectionVariables.set(\"session_id\", response.data.session_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"phone_number\": \"+989123456789\",\n    \"otp_code\": \"123456\",\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/otp/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "otp", "verify", ""]
+            }
+          }
+        },
+        {
+          "name": "Extend Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/session/extend/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "session", "extend", ""]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/integrations/logout/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "logout", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/me/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "accounts", "me", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"doctor@example.com\",\n    \"profile\": {\n        \"full_name\": \"Dr. John Smith\",\n        \"bio\": \"Experienced physician\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts/me/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "accounts", "me", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Encounters",
+      "item": [
+        {
+          "name": "List Encounters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/encounters/?page=1&page_size=20&status=completed",
+              "host": ["{{base_url}}"],
+              "path": ["api", "encounters", ""],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "completed"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Encounter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"encounter_id\", response.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "patient_name",
+                  "value": "John Doe",
+                  "type": "text"
+                },
+                {
+                  "key": "patient_age",
+                  "value": "45",
+                  "type": "text"
+                },
+                {
+                  "key": "patient_gender",
+                  "value": "male",
+                  "type": "text"
+                },
+                {
+                  "key": "chief_complaint",
+                  "value": "Persistent headache",
+                  "type": "text"
+                },
+                {
+                  "key": "audio_file",
+                  "type": "file",
+                  "src": "/path/to/audio.m4a"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/encounters/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "encounters", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Encounter Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/encounters/{{encounter_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "encounters", "{{encounter_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Processing Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/encounters/{{encounter_id}}/status/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "encounters", "{{encounter_id}}", "status", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SOAP Notes",
+      "item": [
+        {
+          "name": "Get SOAP Note",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/outputs/soap-notes/{{encounter_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "outputs", "soap-notes", "{{encounter_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update SOAP Note",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sections\": {\n        \"plan\": {\n            \"medications\": [\n                {\n                    \"name\": \"Acetaminophen\",\n                    \"dosage\": \"500mg\",\n                    \"frequency\": \"QID\"\n                }\n            ]\n        }\n    },\n    \"edit_reason\": \"Updated medication\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/outputs/soap-notes/{{encounter_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "outputs", "soap-notes", "{{encounter_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Export SOAP Note",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"format\": \"pdf\",\n    \"include_transcript\": false,\n    \"language\": \"fa\",\n    \"template\": \"standard\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/outputs/export/{{encounter_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "outputs", "export", "{{encounter_id}}", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search & Analytics",
+      "item": [
+        {
+          "name": "Search Encounters",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"query\": \"headache migraine\",\n    \"search_type\": \"hybrid\",\n    \"filters\": {\n        \"date_from\": \"2024-01-01\",\n        \"date_to\": \"2024-01-31\",\n        \"tags\": [\"neurological\"]\n    },\n    \"limit\": 20,\n    \"include_snippets\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/search/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "search", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Analytics Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analytics/dashboard/?period=month",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "dashboard", ""],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "month"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet & Payments",
+      "item": [
+        {
+          "name": "Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/integrations/wallet/balance/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "wallet", "balance", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Wallet Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/integrations/wallet/transactions/?page=1&status=completed",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "wallet", "transactions", ""],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "completed"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Request Payment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 500000,\n    \"patient_phone\": \"+989123456789\",\n    \"description\": \"Consultation fee\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/payment/request/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "payment", "request", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patient Access",
+      "item": [
+        {
+          "name": "Request Patient Access",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"patient_phone\": \"+989123456789\",\n    \"access_type\": \"view_history\",\n    \"reason\": \"Follow-up consultation\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/patients/request-access/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "patients", "request-access", ""]
+            }
+          }
+        },
+        {
+          "name": "Verify Patient Access",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"request_id\": \"req_123456\",\n    \"otp_code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/integrations/patients/verify-access/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "patients", "verify-access", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Check Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/integrations/health/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "health", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Available Integrations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/integrations/services/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "integrations", "services", ""]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,529 @@
+openapi: 3.0.3
+info:
+  title: SOAPify Authentication API
+  description: احراز هویت با شماره تلفن و کد تأیید برای دسترسی به سرویس‌های SOAPify
+  version: 1.0.0
+  contact:
+    name: SOAPify Support
+    email: support@soapify.com
+    url: https://soapify.com/support
+  license:
+    name: Proprietary
+  termsOfService: https://soapify.com/terms
+servers:
+- url: http://localhost:8000/api
+  description: Development server
+- url: https://api.soapify.com/api
+  description: Production server
+x-metadata:
+  type: openapi
+  tags:
+  - stable
+  - active
+  capability: authentication
+  category: core
+paths:
+  /auth/send-code/:
+    post:
+      summary: ارسال کد تأیید
+      description: ارسال کد ۶ رقمی به شماره تلفن برای احراز هویت
+      tags:
+      - Authentication
+      operationId: sendVerificationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - phone_number
+              - purpose
+              properties:
+                phone_number:
+                  type: string
+                  pattern: ^\+[1-9]\d{1,14}$
+                  example: '+989123456789'
+                  description: شماره تلفن با فرمت بین‌المللی
+                purpose:
+                  type: string
+                  enum:
+                  - login
+                  - register
+                  - reset_password
+                  description: هدف از ارسال کد
+      responses:
+        '200':
+          description: کد با موفقیت ارسال شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Verification code sent successfully
+                  phone_number:
+                    type: string
+                    example: '+989123456789'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/register/:
+    post:
+      summary: ثبت‌نام کاربر جدید
+      description: ثبت‌نام با شماره تلفن و کد تأیید
+      tags:
+      - Authentication
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - phone_number
+              - code
+              - username
+              - password
+              - role
+              properties:
+                phone_number:
+                  type: string
+                  pattern: ^\+[1-9]\d{1,14}$
+                  example: '+989123456789'
+                  description: شماره تلفن (ضروری)
+                code:
+                  type: string
+                  pattern: ^\d{6}$
+                  example: '123456'
+                  description: کد تأیید ۶ رقمی
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 150
+                  example: johndoe
+                password:
+                  type: string
+                  minLength: 8
+                  format: password
+                  example: securepassword123
+                email:
+                  type: string
+                  format: email
+                  example: john@example.com
+                  description: ایمیل (اختیاری)
+                first_name:
+                  type: string
+                  maxLength: 150
+                  example: John
+                  description: نام (اختیاری)
+                last_name:
+                  type: string
+                  maxLength: 150
+                  example: Doe
+                  description: نام خانوادگی (اختیاری)
+                role:
+                  type: string
+                  enum:
+                  - doctor
+                  - admin
+                  description: نقش کاربر
+      responses:
+        '201':
+          description: کاربر با موفقیت ثبت‌نام شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User registered successfully
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: کاربر قبلاً ثبت‌نام شده
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/login-phone/:
+    post:
+      summary: ورود با شماره تلفن
+      description: ورود با شماره تلفن و کد تأیید
+      tags:
+      - Authentication
+      operationId: loginWithPhone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - phone_number
+              - code
+              properties:
+                phone_number:
+                  type: string
+                  pattern: ^\+[1-9]\d{1,14}$
+                  example: '+989123456789'
+                  description: شماره تلفن
+                code:
+                  type: string
+                  pattern: ^\d{6}$
+                  example: '123456'
+                  description: کد تأیید ۶ رقمی
+      responses:
+        '201':
+          description: ورود موفقیت‌آمیز
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: کاربر با این شماره تلفن یافت نشد
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/login/:
+    post:
+      summary: ورود با نام کاربری
+      description: ورود با نام کاربری و رمز عبور
+      tags:
+      - Authentication
+      operationId: loginWithUsername
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - username
+              - password
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                password:
+                  type: string
+                  format: password
+                  example: securepassword123
+      responses:
+        '201':
+          description: ورود موفقیت‌آمیز
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/refresh/:
+    post:
+      summary: تمدید توکن دسترسی
+      description: دریافت توکن دسترسی جدید با استفاده از refresh token
+      tags:
+      - Authentication
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+                username:
+                  type: string
+                  example: johndoe
+                password:
+                  type: string
+                  format: password
+                  example: securepassword123
+      responses:
+        '200':
+          description: توکن با موفقیت تمدید شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+                  token_type:
+                    type: string
+                    example: Bearer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/reset-password/:
+    post:
+      summary: بازنشانی رمز عبور
+      description: تغییر رمز عبور با استفاده از کد تأیید شماره تلفن
+      tags:
+      - Authentication
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - phone_number
+              - code
+              - new_password
+              properties:
+                phone_number:
+                  type: string
+                  pattern: ^\+[1-9]\d{1,14}$
+                  example: '+989123456789'
+                code:
+                  type: string
+                  pattern: ^\d{6}$
+                  example: '123456'
+                new_password:
+                  type: string
+                  minLength: 8
+                  format: password
+                  example: newsecurepassword123
+      responses:
+        '200':
+          description: رمز عبور با موفقیت تغییر یافت
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password reset successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: کاربر یافت نشد
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/current-user/:
+    get:
+      summary: دریافت اطلاعات کاربر فعلی
+      description: دریافت اطلاعات کاربر احراز هویت شده
+      tags:
+      - Authentication
+      operationId: getCurrentUser
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: اطلاعات کاربر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/logout/:
+    post:
+      summary: خروج از سیستم
+      description: خروج و ابطال refresh token
+      tags:
+      - Authentication
+      operationId: logout
+      security:
+      - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+                  description: refresh token برای ابطال (اختیاری)
+      responses:
+        '200':
+          description: خروج موفقیت‌آمیز
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Bearer token - دریافت شده از endpoint های login
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: johndoe
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        first_name:
+          type: string
+          example: John
+        last_name:
+          type: string
+          example: Doe
+        role:
+          type: string
+          enum:
+          - doctor
+          - admin
+          example: doctor
+        phone_number:
+          type: string
+          pattern: ^\+[1-9]\d{1,14}$
+          example: '+989123456789'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2024-01-01T12:00:00Z'
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+          description: 'JWT access token - مدت اعتبار: ۲ روز'
+        refresh_token:
+          type: string
+          example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+          description: 'JWT refresh token - مدت اعتبار: ۱۰ روز'
+        token_type:
+          type: string
+          example: Bearer
+        user:
+          $ref: '#/components/schemas/User'
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid credentials
+        detail:
+          type: string
+          example: The provided credentials are incorrect
+        code:
+          type: string
+          example: AUTH_ERROR
+  responses:
+    BadRequest:
+      description: درخواست نامعتبر
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: احراز هویت ناموفق
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: تعداد درخواست‌ها بیش از حد مجاز
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Too many requests
+              retry_after:
+                type: integer
+                example: 60
+                description: ثانیه‌های باقیمانده تا امکان درخواست مجدد
+    Forbidden:
+      description: دسترسی غیرمجاز
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: یافت نشد
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+tags:
+- name: Authentication
+  description: عملیات‌های احراز هویت با شماره تلفن و JWT
