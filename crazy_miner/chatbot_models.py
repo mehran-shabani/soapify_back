@@ -38,12 +38,12 @@ class ChatSession(models.Model):
     # ------------------------------------------------------------------
     def end(self, when: timezone.datetime | None = None) -> None:
         """
-        Mark the chat session as ended.
+        Close the chat session.
         
-        This operation is idempotent: if the session is already closed, it does nothing. If `when` is provided, `ended_at` is set to that timestamp; otherwise the current time is used. Only the session's open state and end timestamp are persisted.
+        If the session is already closed this is a no-op. Sets `ended_at` to the provided timezone-aware datetime or to `timezone.now()` when omitted, marks `is_open` False, and persists only those two fields.
          
         Parameters:
-            when (datetime | None): Optional timezone-aware datetime to use as the session end time. If None, the current time (timezone.now()) is used.
+            when (datetime | None): Optional timezone-aware end timestamp. If None, the current time (timezone.now()) is used.
         """
         if not self.is_open:
             return
@@ -68,11 +68,12 @@ class ChatMessage(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         """
-        Return a short, human-readable preview of the chat message.
+        Return a compact one-line preview of the chat message.
         
-        The string contains the message timestamp (YYYY-MM-DD HH:MM), the sender role ("BOT" or "USER"), and the first 40 characters of the message followed by an ellipsis.
+        The string is formatted as "[YYYY-MM-DD HH:MM] ROLE: <first 40 chars>…", where ROLE is "BOT" for bot messages or "USER" for user messages. Returns a single-line human-readable representation used for display and logging.
+        
         Returns:
-            str: Compact one-line representation used for display and logging.
+            str: Compact one-line representation of this ChatMessage.
         """
         role = "BOT" if self.is_bot else "USER"
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {role}: {self.message[:40]}…"

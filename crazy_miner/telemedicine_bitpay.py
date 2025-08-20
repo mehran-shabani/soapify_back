@@ -5,17 +5,13 @@ def bitpay_request_payment(self, api_key, redirect_url, amount, order_id):
     """
     Create a BitPay payment request and return the gateway response.
     
-    Sends a POST request to the BitPay gateway endpoint with the provided API key, redirect URL, amount, and order ID.
+    Sends a form-encoded POST to the BitPay gateway endpoint with the provided API key, redirect URL, amount, and order ID (sent as `factorId`). On a successful HTTP response (response.ok is True) the raw `requests.Response` is returned; on an unsuccessful HTTP response a dict `{'status': -1, 'message': 'Failed to connect to the payment gateway.'}` is returned. Network or HTTP-related exceptions from `requests.post` are not handled and will propagate.
     
     Parameters:
         api_key (str): Merchant API key for the BitPay gateway.
-        redirect_url (str): URL to which the user will be redirected after payment.
-        amount (int|float|str): Payment amount accepted by the gateway (type accepted by the API).
-        order_id (str|int): Merchant's order identifier sent as `factorId`.
-    
-    Returns:
-        requests.Response: The HTTP response from the gateway when the request succeeds (response.ok is True).
-        dict: On failure, a dict with keys `status` (-1) and `message` describing the failure.
+        redirect_url (str): URL to redirect the user after payment.
+        amount (int|float|str): Payment amount as accepted by the gateway.
+        order_id (str|int): Merchant order identifier; sent to the gateway as `factorId`.
     """
     data = {
         'api': api_key,

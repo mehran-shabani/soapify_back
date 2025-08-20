@@ -50,20 +50,20 @@ class CustomUserManager(BaseUserManager):
         """
         Create and save a superuser with staff and superuser privileges.
         
-        Ensures 'is_staff' and 'is_superuser' are set to True, validates that both
-        username and email are provided, and delegates to create_user to create the user.
-        
-        Raises:
-            ValueError: If email or username is not provided (messages are in Persian).
+        Ensures `is_staff` and `is_superuser` are set to True, requires both `username` and `email`,
+        and delegates creation to `create_user`.
         
         Parameters:
-            username: The username for the new superuser.
-            email: The email address for the new superuser.
-            password: Plain-text password for the new superuser.
-            **extra_fields: Additional fields passed through to create_user.
+            username (str): Username for the superuser.
+            email (str): Email address for the superuser.
+            password (str): Plain-text password for the superuser.
+            **extra_fields: Additional model fields forwarded to `create_user`.
         
         Returns:
-            The created user instance.
+            CustomUser: The created superuser instance.
+        
+        Raises:
+            ValueError: If `email` or `username` is not provided (error messages are in Persian).
         """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
@@ -151,14 +151,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 def drug_image_path(instance, filename):
     """
-    Return a deterministic upload path for a drug image incorporating the user's ID and a timestamp.
+    Return a deterministic upload path for a drug image.
     
-    Parameters:
-        instance: Model instance with a related `user` attribute (used to obtain user.id).
-        filename (str): Original filename; appended to the generated path.
-    
-    Returns:
-        str: File path in the form 'drug_images/<user_id>/<unix_timestamp>_<filename>'.
+    The path is built as 'drug_images/<user_id>/<unix_timestamp>_<filename>'. Requires that
+    `instance` has a related `user` with an `id` attribute; `filename` is appended to the path.
     """
     return f'drug_images/{instance.user.id}/{int(time.time())}_{filename}'
 
@@ -321,15 +317,15 @@ class Transaction(models.Model):
 
 def validate_image_url(value):
     """
-    Validate that `value` is a valid URL pointing to a common image file.
+    Validate that `value` is a syntactically valid URL that appears to reference a common image file.
     
-    Checks that `value` is a syntactically valid URL and that its path ends with one of the supported image extensions ('.jpg', '.jpeg', '.png', '.gif', '.webp'). Raises a ValidationError if the URL is invalid or does not appear to reference an image.
+    The function checks that `value` is a valid URL and that its path contains one of the supported image extensions: .jpg, .jpeg, .png, .gif, .webp. If validation fails, a django ValidationError is raised with the Persian message 'لطفاً یک آدرس URL معتبر وارد کنید'.
     
     Parameters:
         value (str): The URL to validate.
     
     Raises:
-        django.core.exceptions.ValidationError: If the URL is not valid (message: 'لطفاً یک آدرس URL معتبر وارد کنید') or if it does not end with a supported image extension (message: 'لطفاً یک آدرس تصویر معتبر وارد کنید').
+        django.core.exceptions.ValidationError: If `value` is not a valid URL or does not appear to reference a supported image file (message: 'لطفاً یک آدرس URL معتبر وارد کنید').
     """
     url_validator = URLValidator()
     try:
@@ -391,9 +387,9 @@ class Comment(models.Model):
 
     def like(self):
         """
-        Increment the comment's like counter by one and persist the change.
+        Increment the comment's like count by one and persist the change.
         
-        Updates the instance's `likes` field and saves the model to the database.
+        Increments the instance's `likes` field and saves the model to the database.
         """
         self.likes += 1
         self.save()
@@ -406,13 +402,13 @@ class BoxMoney(models.Model):
 
     def has_sufficient_balance(self, price: int) -> bool:
         """
-        Return True if the wallet balance is greater than or equal to the given price.
+        Return True if the BoxMoney balance is at least the given price.
         
         Parameters:
-            price (int): Amount to check against the current balance.
+            price (int): Amount to compare against the stored balance.
         
         Returns:
-            bool: True if balance >= price, otherwise False.
+            bool: True when the current balance >= price, otherwise False.
         """
         return self.amount >= price
 
@@ -472,10 +468,11 @@ class Order(models.Model):
     def save(self, *args, **kwargs):
         # ساخت خودکار مسیر دانلود
         """
-        Ensure an order has a download URL before saving.
+        Ensure the Order has a download URL before saving.
         
-        If download_url is empty, sets it to a generated URL using the order's national_code (format:
-        https://api.medogram.ir/order/download/order_{national_code}.pdf), then delegates to the parent save().
+        If download_url is empty, populate it with
+        https://api.medogram.ir/order/download/order_{national_code}.pdf using the instance's national_code,
+        then call the superclass save to persist the instance.
         """
         if not self.download_url:  # اگر مسیر دانلود خالی بود
             self.download_url = f"https://api.medogram.ir/order/download/order_{self.national_code}.pdf"
