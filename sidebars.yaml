@@ -1,142 +1,140 @@
-# Sidebars Configuration for SOAPify Documentation
-
-- group: شروع سریع
+- group: Fast Starter
   items:
-    - page: معرفی SOAPify
+    - page: Introduction
       link: /introduction/
-    - page: راه‌اندازی اولیه
+    - page: Getting Started
       link: /getting-started/
-    - page: احراز هویت
+    - page: Authentication
       link: /authentication/
       items:
-        - page: ثبت‌نام با شماره تلفن
+        - page: Phone Registration
           link: /authentication/phone-registration/
-        - page: ورود با کد یکبار مصرف
+        - page: OTP Login
           link: /authentication/otp-login/
-        - page: مدیریت توکن JWT
+        - page: Manage JWT Tokens
           link: /authentication/jwt-tokens/
 
-- group: APIهای اصلی
+- group: Main API
   items:
-    - page: مدیریت ملاقات‌ها
+    - page: Manage Visits
       link: /core/encounters/
       items:
-        - page: ایجاد ملاقات
+        - page: Create Visit
           link: /core/encounters/create/
-        - page: جستجو و فیلتر
+        - page: Search & Filtering
           link: /core/encounters/search/
-        - page: به‌روزرسانی وضعیت
+        - page: Update Visit Status
           link: /core/encounters/status/
     
-    - page: پردازش صوت (STT)
+    - page: Sound Processing (STT)
       link: /core/stt/
       items:
-        - page: شروع ضبط
+        - page: Start Recording
           link: /core/stt/recording/
-        - page: آپلود فایل صوتی
+        - page: Upload Audio File
           link: /core/stt/upload/
-        - page: دریافت رونوشت
+        - page: Retrieve Transcription
           link: /core/stt/transcription/
     
-    - page: پردازش متن (NLP)
+    - page: Text Processing (NLP)
       link: /core/nlp/
       items:
-        - page: تولید پیش‌نویس SOAP
+        - page: Generate SOAP Draft
           link: /core/nlp/generate-draft/
-        - page: استخراج اطلاعات
+        - page: Information Extraction
           link: /core/nlp/extraction/
-        - page: تحلیل احساسات
+        - page: Sentiment Analysis
           link: /core/nlp/sentiment/
 
-- group: ویژگی‌های پیشرفته
+- group: Advanced Features
   items:
-    - page: چک‌لیست‌های پویا
+    - page: Dynamic Checklists
       link: /features/checklists/
       items:
-        - page: قالب‌های چک‌لیست
+        - page: Checklist Templates
           link: /features/checklists/templates/
-        - page: ارزیابی و امتیازدهی
+        - page: Evaluation & Scoring
           link: /features/checklists/evaluation/
     
-    - page: جستجوی پیشرفته
+    - page: Advanced Search
       link: /features/search/
       items:
-        - page: جستجوی معنایی
+        - page: Semantic Search
           link: /features/search/semantic/
-        - page: فیلترهای ترکیبی
+        - page: Combined Filters
           link: /features/search/filters/
     
-    - page: خروجی و گزارش‌ها
+    - page: Outputs & Reports
       link: /features/outputs/
       items:
-        - page: قالب‌های خروجی
+        - page: Output Templates
           link: /features/outputs/templates/
-        - page: صادرات PDF/DOCX
+        - page: Export PDF/DOCX
           link: /features/outputs/export/
-        - page: اشتراک‌گذاری امن
+        - page: Secure Sharing
           link: /features/outputs/sharing/
 
-- group: یکپارچه‌سازی‌ها
+- group: Integrations
   items:
-    - page: اتصال به Helssa
+    - page: Helssa Integration
       link: /integrations/helssa/
       items:
-        - page: تنظیمات اولیه
+        - page: Initial Setup
           link: /integrations/helssa/setup/
-        - page: همگام‌سازی داده‌ها
+        - page: Data Synchronization
           link: /integrations/helssa/sync/
-        - page: مدیریت خطاها
+        - page: Error Management
           link: /integrations/helssa/errors/
     
-    - page: وب‌هوک‌ها
+    - page: Webhooks
       link: /integrations/webhooks/
       items:
-        - page: پیکربندی
+        - page: Configuration
           link: /integrations/webhooks/configuration/
-        - page: رویدادهای پشتیبانی شده
+        - page: Supported Events
           link: /integrations/webhooks/events/
-        - page: امنیت و امضا
+        - page: Security & Signatures
           link: /integrations/webhooks/security/
 
-- group: مدیریت و تحلیل
+- group: Management & Analytics
   items:
-    - page: داشبورد تحلیلی
+    - page: Analytics Dashboard
       link: /analytics/dashboard/
-    - page: گزارش‌های عملکرد
+    - page: Performance Reports
       link: /analytics/reports/
-    - page: مدیریت کاربران
+    - page: User Management
       link: /admin/users/
-    - page: تنظیمات سیستم
+    - page: System Settings
       link: /admin/settings/
 
-- group: راهنمای توسعه
+- group: Developer Guide
   items:
-    - page: محیط توسعه
+    - page: Development Environment
       link: /development/environment/
-    - page: نمونه کدها
+    - page: Code Examples
       link: /development/examples/
       items:
         - page: Python
           link: /development/examples/python/
-        - page: JavaScript/Node.js
+        - page: JavaScript / Node.js
           link: /development/examples/javascript/
         - page: PHP
           link: /development/examples/php/
-        - page: C#/.NET
+        - page: C# / .NET
           link: /development/examples/csharp/
     
     - page: SDKs
       link: /development/sdks/
-    - page: بهترین شیوه‌ها
+    - page: Best Practices
       link: /development/best-practices/
 
-- group: پشتیبانی
+- group: Support
   items:
-    - page: سوالات متداول
+    - page: FAQ
       link: /support/faq/
-    - page: عیب‌یابی
+    - page: Troubleshooting
       link: /support/troubleshooting/
-    - page: محدودیت‌ها و نرخ
+    - page: Rate Limits
       link: /support/rate-limits/
-    - page: تماس با پشتیبانی
+    - page: Contact Support
       link: /support/contact/
