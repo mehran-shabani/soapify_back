@@ -15,6 +15,9 @@ x-metadata:
   capability: analytics
   category: auxiliary
 
+security:
+  - bearerAuth: []
+
 paths:
   /analytics/dashboard/:
     get:
