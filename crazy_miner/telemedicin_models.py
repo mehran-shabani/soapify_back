@@ -208,9 +208,14 @@ class Transaction(models.Model):
     card_num = models.CharField(max_length=20, blank=True, null=True)  # شماره کارت
     factor_id = models.CharField(max_length=100, blank=True, null=True)  # شناسه فاکتور
     status = models.CharField(max_length=20, default='pending')
+    
+    # فیلدهای جدید برای SOAPify
+    is_soapify = models.BooleanField(default=False, help_text="آیا این پرداخت برای SOAPify است؟")
+    doctor_phone = models.CharField(max_length=15, blank=True, null=True, help_text="شماره تلفن پزشک در SOAPify")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
     def __str__(self):
         return f"Transaction {self.user.phone_number} - {self.amount} - {self.status}"
 
