@@ -70,8 +70,7 @@ def update_wallet_after_transaction(sender, instance, **kwargs):
         return
 
     wallet, _ = BoxMoney.objects.get_or_create(user=instance.user)
-    wallet.amount += instance.amount
-    wallet.save(update_fields=["amount"])
+    BoxMoney.objects.filter(pk=wallet.pk).update(amount=F('amount') + instance.amount)
 
 
 # ──────────────────────────────
