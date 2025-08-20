@@ -77,5 +77,5 @@ class ChatSummary(models.Model):
         verbose_name_plural = "Chat summaries"
 
     def __str__(self) -> str:  # pragma: no cover
-        tgt = f"session {self.session_id}" if self.session_id else "global"
+        tgt = f"session {self.session.id}" if self.session else "global"
         return f"Summary #{self.pk} ({tgt})"
