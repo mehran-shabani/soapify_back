@@ -127,16 +127,15 @@ class BoxMoneySerializer(serializers.ModelSerializer):
 
 # CrazyMiner Payment Serializers
 class CrazyMinerCreatePaymentSerializer(serializers.Serializer):
-    """سریالایزر برای ایجاد درخواست پرداخت"""
+    """سریالایزر برای ایجاد درخواست شارژ کیف پول"""
     amount = serializers.DecimalField(max_digits=10, decimal_places=0)
-    description = serializers.CharField(required=False, allow_blank=True)
-    user_identifier = serializers.CharField(help_text="شماره موبایل یا شناسه کاربر در سیستم اصلی")
+    description = serializers.CharField(required=False, allow_blank=True, default="شارژ کیف پول")
     
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("مبلغ باید بیشتر از صفر باشد")
         if value < 10000:  # حداقل 10,000 ریال
-            raise serializers.ValidationError("حداقل مبلغ پرداخت 10,000 ریال است")
+            raise serializers.ValidationError("حداقل مبلغ شارژ 10,000 ریال است")
         return value
 
 

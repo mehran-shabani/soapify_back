@@ -29,6 +29,7 @@ urlpatterns = [
                   path('down/', include('down.roots')),
                   path('doc/', include('doctor_online.roots')),
                   path('sub/', include('sub.roots')),
-                  path('crazyminer/payment/', include('crazy_miner.payment_urls'))
+                  path('crazyminer/payment/', include('crazy_miner.payment_urls')),
+                  path('crazyminer/patient/', include('crazy_miner.patient_access_urls'))
 
                 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,6 +1,6 @@
 """
 Payment Gateway Client برای CrazyMiner
-مدیریت ارتباط با سرور خارجی پرداخت و دریافت اطلاعات کاربر
+مدیریت ارتباط با سرور خارجی فقط برای پرداخت
 """
 import requests
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CrazyMinerGateway:
-    """کلاینت برای درگاه پرداخت خارجی و دریافت اطلاعات کاربر"""
+    """کلاینت برای درگاه پرداخت خارجی"""
     
     def __init__(self):
         # Base URL از تنظیمات یا پیش‌فرض api.medogram.ir
@@ -24,77 +24,16 @@ class CrazyMinerGateway:
             'create_payment': '/payment/gateway-send',
             'verify_payment': '/payment/gateway-result-second',
             'get_payment': '/payment/gateway-{id}-get',
-            'get_user_info': '/api/v1/user/info',  # endpoint برای دریافت اطلاعات کاربر
         }
     
-    def _prepare_headers(self, auth_token=None):
+    def _prepare_headers(self):
         """آماده‌سازی هدرهای درخواست"""
-        headers = {
+        return {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
         }
-        
-        if auth_token:
-            headers['Authorization'] = f'Bearer {auth_token}'
-        
-        return headers
     
-    def get_user_info(self, user_identifier, auth_token=None):
-        """
-        دریافت اطلاعات کاربر از سرور اصلی
-        
-        Args:
-            user_identifier: شناسه کاربر (phone_number یا user_id)
-            auth_token: توکن احراز هویت (اختیاری)
-            
-        Returns:
-            dict: اطلاعات کاربر یا خطا
-        """
-        try:
-            # آماده‌سازی داده درخواست
-            request_data = {
-                'identifier': user_identifier,
-                'source': 'crazy_miner'
-            }
-            
-            logger.info(f"درخواست اطلاعات کاربر: {user_identifier}")
-            
-            response = requests.post(
-                f"{self.base_url}{self.endpoints['get_user_info']}",
-                json=request_data,
-                headers=self._prepare_headers(auth_token),
-                timeout=self.timeout
-            )
-            
-            if response.status_code == 200:
-                user_data = response.json()
-                
-                # ذخیره اطلاعات حساس به صورت رمزنگاری شده
-                if 'sensitive_data' in user_data:
-                    encrypted_info = crazy_crypto.encrypt_user_info(user_data['sensitive_data'])
-                    user_data['encrypted_info'] = encrypted_info
-                    # حذف اطلاعات حساس از پاسخ
-                    del user_data['sensitive_data']
-                
-                return {
-                    'success': True,
-                    'user_data': user_data
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': f'خطا در دریافت اطلاعات کاربر: HTTP {response.status_code}',
-                    'status_code': response.status_code
-                }
-                
-        except Exception as e:
-            logger.error(f"خطا در دریافت اطلاعات کاربر {user_identifier}: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def create_payment_request(self, amount, order_id, redirect_url, user_data=None):
+    def create_payment_request(self, amount, order_id, redirect_url):
         """
         ایجاد درخواست پرداخت
         
@@ -102,7 +41,6 @@ class CrazyMinerGateway:
             amount: مبلغ پرداخت (ریال)
             order_id: شناسه یکتای سفارش/تراکنش
             redirect_url: URL بازگشت پس از پرداخت
-            user_data: اطلاعات اضافی کاربر (اختیاری)
             
         Returns:
             dict: پاسخ از درگاه پرداخت
@@ -115,15 +53,6 @@ class CrazyMinerGateway:
                 'factorId': str(order_id),
                 'redirect': redirect_url,
             }
-            
-            # افزودن اطلاعات کاربر در صورت وجود
-            if user_data:
-                # رمزنگاری اطلاعات حساس قبل از ارسال
-                if 'user_info' in user_data:
-                    encrypted_info = crazy_crypto.encrypt_user_info(user_data['user_info'])
-                    payment_data['encrypted_user_info'] = encrypted_info
-                else:
-                    payment_data.update(user_data)
             
             logger.info(f"ایجاد درخواست پرداخت برای سفارش {order_id}, مبلغ: {amount} ریال")
             

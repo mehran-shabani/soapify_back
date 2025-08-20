@@ -1,5 +1,7 @@
 # telemedicine/signals.py
 import random
+import requests
+import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,6 +13,8 @@ from kavenegar import KavenegarAPI
 from telemedicine.models import BoxMoney, Transaction, Visit, APKDownloadStat
 from django.utils import timezone
 from django.db.models import F
+
+logger = logging.getLogger(__name__)
 
 
 

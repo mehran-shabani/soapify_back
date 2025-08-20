@@ -66,27 +66,26 @@ class CrazyMinerCrypto:
         except Exception as e:
             raise Exception(f"خطا در رمزگشایی: {str(e)}")
     
-    def encrypt_user_info(self, user_info):
-        """رمزنگاری اطلاعات کاربر برای ارسال به سرور دیگر"""
-        if not user_info:
+    def encrypt_payment_data(self, payment_data):
+        """رمزنگاری اطلاعات پرداخت"""
+        if not payment_data:
             return ""
         
-        # فیلدهای حساس که باید رمزنگاری شوند
-        sensitive_fields = {
-            'phone_number': user_info.get('phone_number', ''),
-            'email': user_info.get('email', ''),
-            'national_code': user_info.get('national_code', ''),
-            'user_id': str(user_info.get('user_id', '')),
+        # فقط اطلاعات ضروری پرداخت رمزنگاری می‌شود
+        sensitive_data = {
+            'amount': str(payment_data.get('amount', '')),
+            'transaction_id': str(payment_data.get('transaction_id', '')),
+            'timestamp': str(payment_data.get('timestamp', '')),
         }
         
-        return self.encrypt_data(sensitive_fields)
+        return self.encrypt_data(sensitive_data)
     
-    def decrypt_user_info(self, encrypted_user_info):
-        """رمزگشایی اطلاعات کاربر"""
-        if not encrypted_user_info:
+    def decrypt_payment_data(self, encrypted_payment_data):
+        """رمزگشایی اطلاعات پرداخت"""
+        if not encrypted_payment_data:
             return {}
         
-        return self.decrypt_data(encrypted_user_info)
+        return self.decrypt_data(encrypted_payment_data)
 
 
 # ایجاد نمونه singleton

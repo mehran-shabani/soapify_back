@@ -1,12 +1,13 @@
-# راهنمای سیستم پرداخت CrazyMiner
+# راهنمای سیستم شارژ کیف پول CrazyMiner
 
 ## معرفی
-سیستم پرداخت CrazyMiner برای مدیریت پرداخت‌ها از طریق سرور خارجی (api.medogram.ir) طراحی شده است. این سیستم اطلاعات کاربران را از سرور اصلی دریافت می‌کند و پرداخت‌ها را با رمزنگاری ساده مدیریت می‌کند.
+سیستم شارژ کیف پول CrazyMiner برای مدیریت شارژ کیف پول کاربران از طریق درگاه پرداخت خارجی (api.medogram.ir) طراحی شده است. کاربران سیستم می‌توانند کیف پول خود را شارژ کرده و از خدمات استفاده کنند.
 
 ## ویژگی‌ها
-- دریافت اطلاعات کاربر از سرور خارجی
-- رمزنگاری اطلاعات حساس کاربران
-- ایجاد و پیگیری تراکنش‌های پرداخت
+- شارژ کیف پول کاربران داخلی
+- پرداخت از طریق درگاه خارجی (بدون تغییر دامنه)
+- به‌روزرسانی خودکار موجودی کیف پول بعد از پرداخت موفق
+- رمزنگاری اطلاعات حساس پرداخت
 - ثبت لاگ کامل از تمام فعالیت‌ها
 - پشتیبانی از callback درگاه پرداخت
 
@@ -33,17 +34,17 @@ python manage.py migrate
 
 ## نقاط پایانی API
 
-### 1. ایجاد پرداخت
+### 1. شارژ کیف پول (نیاز به احراز هویت)
 ```
 POST /crazyminer/payment/create/
+Headers: Authorization: Bearer <token>
 ```
 
 Body (JSON):
 ```json
 {
     "amount": 100000,
-    "description": "توضیحات پرداخت",
-    "user_identifier": "09123456789"
+    "description": "شارژ کیف پول"
 }
 ```
 
@@ -98,13 +99,14 @@ GET /crazyminer/payment/list/
 ## مدل‌های داده
 
 ### CrazyMinerPayment
-- ذخیره اطلاعات اصلی تراکنش
+- ذخیره اطلاعات تراکنش‌های شارژ کیف پول
 - وضعیت‌ها: pending, processing, completed, failed, cancelled
-- رمزنگاری اطلاعات کاربر در فیلد encrypted_user_data
+- انواع پرداخت: wallet_charge (شارژ کیف پول), service_payment (پرداخت خدمات)
+- به‌روزرسانی خودکار موجودی BoxMoney بعد از تکمیل
 
 ### CrazyMinerPaymentLog
 - ثبت تمام فعالیت‌های مربوط به پرداخت
-- انواع لاگ: request, callback, verification, user_fetch, error
+- انواع لاگ: request, callback, verification, error
 
 ## امنیت
 
@@ -137,13 +139,15 @@ GET /crazyminer/payment/list/
 ```python
 import requests
 
-# ایجاد پرداخت
+# شارژ کیف پول
 response = requests.post(
     'https://your-domain.com/crazyminer/payment/create/',
+    headers={
+        'Authorization': 'Bearer YOUR_AUTH_TOKEN'
+    },
     json={
         'amount': 100000,
-        'description': 'خرید اشتراک',
-        'user_identifier': '09123456789'
+        'description': 'شارژ کیف پول'
     }
 )
 
@@ -155,16 +159,16 @@ if response.status_code == 201:
 
 ### JavaScript/fetch
 ```javascript
-// ایجاد پرداخت
+// شارژ کیف پول
 fetch('/crazyminer/payment/create/', {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
     },
     body: JSON.stringify({
         amount: 100000,
-        description: 'خرید اشتراک',
-        user_identifier: '09123456789'
+        description: 'شارژ کیف پول'
     })
 })
 .then(response => response.json())
