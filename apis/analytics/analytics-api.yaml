@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: SOAPify Analytics API
+  description: 'APIهای تحلیل داده و گزارش‌گیری عملکرد پلتفرم SOAPify'
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api
+    description: Development server
+  - url: https://api.soapify.com/api
+    description: Production server
+
+x-metadata:
+  type: openapi
+  tags: [stable, active]
+  capability: analytics
+  category: auxiliary
+
+paths:
+  /analytics/dashboard/:
+    get:
+      summary: داده‌های داشبورد
+      description: 'دریافت داده‌های آماری برای نمایش در داشبورد'
+      tags:
+        - Analytics
+      operationId: getDashboardData
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: 'بازه زمانی'
+          schema:
+            type: string
+            enum: [today, week, month, quarter, year]
+            default: month
+        - name: doctor_id
+          in: query
+          description: 'فیلتر بر اساس پزشک'
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: داده‌های داشبورد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    properties:
+                      total_encounters:
+                        type: integer
+                        example: 1250
+                      completed_encounters:
+                        type: integer
+                        example: 1100
+                      average_duration:
+                        type: number
+                        format: float
+                        example: 12.5
+                        description: 'میانگین مدت ملاقات (دقیقه)'
+                  charts:
+                    type: object
+                    properties:
+                      encounters_by_day:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              format: date
+                            count:
+                              type: integer
+                      top_complaints:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            complaint:
+                              type: string
+                            count:
+                              type: integer
+                            percentage:
+                              type: number
+
+  /analytics/reports/performance/:
+    get:
+      summary: گزارش عملکرد
+      description: 'گزارش تفصیلی عملکرد پزشکان و کیفیت مستندسازی'
+      tags:
+        - Analytics
+      operationId: getPerformanceReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [doctor, department, day, week, month]
+            default: doctor
+      responses:
+        '200':
+          description: گزارش عملکرد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: object
+                    properties:
+                      start_date:
+                        type: string
+                        format: date
+                      end_date:
+                        type: string
+                        format: date
+                  metrics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        group_id:
+                          type: string
+                        group_name:
+                          type: string
+                        total_encounters:
+                          type: integer
+                        completion_rate:
+                          type: number
+                          format: float
+                        average_quality_score:
+                          type: number
+                          format: float
+                        average_processing_time:
+                          type: number
+                          format: float
+
+  /analytics/quality/scores/:
+    get:
+      summary: نمرات کیفیت
+      description: 'ارزیابی کیفیت مستندات SOAP تولید شده'
+      tags:
+        - Analytics
+      operationId: getQualityScores
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: encounter_id
+          in: query
+          description: 'برای یک ملاقات خاص'
+          schema:
+            type: integer
+        - name: min_score
+          in: query
+          description: 'حداقل نمره'
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 100
+      responses:
+        '200':
+          description: نمرات کیفیت
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    encounter_id:
+                      type: integer
+                    quality_score:
+                      type: number
+                      format: float
+                      example: 87.5
+                    components:
+                      type: object
+                      properties:
+                        completeness:
+                          type: number
+                          example: 90.0
+                        accuracy:
+                          type: number
+                          example: 85.0
+                        relevance:
+                          type: number
+                          example: 88.0
+                        formatting:
+                          type: number
+                          example: 95.0
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Analytics
+    description: 'تحلیل داده و گزارش‌گیری'

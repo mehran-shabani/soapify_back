@@ -1,0 +1,272 @@
+openapi: 3.0.3
+info:
+  title: Helssa Integration API
+  description: 'APIهای یکپارچه‌سازی با سیستم Helssa برای تبادل اطلاعات پزشکی'
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api
+    description: Development server
+  - url: https://api.soapify.com/api
+    description: Production server
+
+x-metadata:
+  type: openapi
+  tags: [stable, active]
+  capability: integrations
+  category: external
+
+paths:
+  /integrations/helssa/auth/:
+    post:
+      summary: احراز هویت Helssa
+      description: 'دریافت توکن برای ارتباط با سیستم Helssa'
+      tags:
+        - Helssa
+      operationId: authenticateHelssa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - helssa_username
+                - helssa_password
+              properties:
+                helssa_username:
+                  type: string
+                  example: 'doctor123'
+                helssa_password:
+                  type: string
+                  format: password
+                clinic_code:
+                  type: string
+                  example: 'CLN001'
+      responses:
+        '200':
+          description: احراز هویت موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  helssa_token:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+                  permissions:
+                    type: array
+                    items:
+                      type: string
+
+  /integrations/helssa/patients/search/:
+    get:
+      summary: جستجوی بیمار در Helssa
+      description: 'جستجوی اطلاعات بیمار در سیستم Helssa'
+      tags:
+        - Helssa
+      operationId: searchHelssaPatients
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: national_id
+          in: query
+          description: 'کد ملی بیمار'
+          schema:
+            type: string
+            pattern: '^\d{10}$'
+        - name: phone_number
+          in: query
+          description: 'شماره تلفن'
+          schema:
+            type: string
+        - name: name
+          in: query
+          description: 'نام بیمار'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: نتایج جستجو
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    helssa_patient_id:
+                      type: string
+                      example: 'HLS123456'
+                    national_id:
+                      type: string
+                    full_name:
+                      type: string
+                    phone_number:
+                      type: string
+                    insurance_info:
+                      type: object
+                      properties:
+                        provider:
+                          type: string
+                        policy_number:
+                          type: string
+
+  /integrations/helssa/encounters/sync/:
+    post:
+      summary: همگام‌سازی ملاقات
+      description: 'ارسال اطلاعات ملاقات و SOAP به Helssa'
+      tags:
+        - Helssa
+      operationId: syncEncounterToHelssa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+                - helssa_patient_id
+              properties:
+                encounter_id:
+                  type: integer
+                  example: 123
+                helssa_patient_id:
+                  type: string
+                  example: 'HLS123456'
+                include_attachments:
+                  type: boolean
+                  default: true
+                  description: 'شامل فایل‌های ضمیمه'
+                sync_mode:
+                  type: string
+                  enum: [create, update, merge]
+                  default: create
+      responses:
+        '200':
+          description: همگام‌سازی موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                    example: 'SYNC_ABC123'
+                  helssa_record_id:
+                    type: string
+                    example: 'HLS_REC_789'
+                  status:
+                    type: string
+                    enum: [synced, pending, failed]
+                  sync_details:
+                    type: object
+                    properties:
+                      synced_at:
+                        type: string
+                        format: date-time
+                      items_synced:
+                        type: array
+                        items:
+                          type: string
+
+  /integrations/helssa/prescriptions/send/:
+    post:
+      summary: ارسال نسخه به Helssa
+      description: 'ارسال نسخه الکترونیک به سیستم Helssa'
+      tags:
+        - Helssa
+      operationId: sendPrescriptionToHelssa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+                - prescription_items
+              properties:
+                encounter_id:
+                  type: integer
+                prescription_items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      drug_code:
+                        type: string
+                      drug_name:
+                        type: string
+                      dosage:
+                        type: string
+                      frequency:
+                        type: string
+                      duration:
+                        type: string
+                      instructions:
+                        type: string
+      responses:
+        '200':
+          description: نسخه ارسال شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prescription_id:
+                    type: string
+                  tracking_code:
+                    type: string
+                  qr_code:
+                    type: string
+                    format: base64
+
+  /integrations/helssa/status/:
+    get:
+      summary: وضعیت اتصال
+      description: 'بررسی وضعیت اتصال به سیستم Helssa'
+      tags:
+        - Helssa
+      operationId: getHelssaConnectionStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: وضعیت اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected:
+                    type: boolean
+                  last_sync:
+                    type: string
+                    format: date-time
+                  pending_syncs:
+                    type: integer
+                  error_count:
+                    type: integer
+                  service_status:
+                    type: string
+                    enum: [operational, degraded, down]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Helssa
+    description: 'یکپارچه‌سازی با سیستم Helssa'

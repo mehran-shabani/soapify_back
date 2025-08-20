@@ -1,0 +1,584 @@
+openapi: 3.0.3
+info:
+  title: SOAPify Main API
+  description: 'سرویس استخراج، تدوین و نهایی‌سازی یادداشت‌های پزشکی SOAP از ورودی‌های صوتی/متنی'
+  version: 1.0.0
+  contact:
+    name: SOAPify Support
+    email: support@soapify.com
+servers:
+  - url: http://localhost:8000/api
+    description: Development server
+  - url: https://api.soapify.com/api
+    description: Production server
+
+# Metadata for Redocly catalog filtering
+x-metadata:
+  type: openapi
+  tags: [stable, active]
+  capability: core
+  category: main
+
+paths:
+  /encounters/:
+    get:
+      summary: لیست ملاقات‌ها
+      description: 'دریافت لیست ملاقات‌های پزشک با امکان فیلتر و جستجو'
+      tags:
+        - Encounters
+      operationId: listEncounters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: 'جستجو در نام بیمار یا شرح ملاقات'
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          description: 'تاریخ شروع (YYYY-MM-DD)'
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: 'تاریخ پایان (YYYY-MM-DD)'
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          description: 'وضعیت ملاقات'
+          schema:
+            type: string
+            enum: [draft, completed, finalized]
+        - name: page
+          in: query
+          description: 'شماره صفحه'
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: 'تعداد در هر صفحه'
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: لیست ملاقات‌ها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 150
+                  next:
+                    type: string
+                    nullable: true
+                    example: 'http://localhost:8000/api/encounters/?page=2'
+                  previous:
+                    type: string
+                    nullable: true
+                    example: null
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EncounterSummary'
+
+    post:
+      summary: ایجاد ملاقات جدید
+      description: 'ثبت ملاقات جدید برای بیمار'
+      tags:
+        - Encounters
+      operationId: createEncounter
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - patient_name
+              properties:
+                patient_name:
+                  type: string
+                  example: 'علی محمدی'
+                patient_phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                  example: '+989123456789'
+                patient_age:
+                  type: integer
+                  minimum: 0
+                  maximum: 150
+                  example: 35
+                patient_gender:
+                  type: string
+                  enum: [male, female, other]
+                  example: 'male'
+                chief_complaint:
+                  type: string
+                  example: 'سردرد و سرگیجه'
+                appointment_date:
+                  type: string
+                  format: date-time
+                  example: '2024-01-15T10:30:00Z'
+      responses:
+        '201':
+          description: ملاقات با موفقیت ایجاد شد
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+
+  /encounters/{id}/:
+    get:
+      summary: جزئیات ملاقات
+      description: 'دریافت اطلاعات کامل یک ملاقات'
+      tags:
+        - Encounters
+      operationId: getEncounter
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 'شناسه ملاقات'
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: جزئیات ملاقات
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '404':
+          description: ملاقات یافت نشد
+
+  /stt/start-recording/:
+    post:
+      summary: شروع ضبط صدا
+      description: 'آغاز ضبط صدای جلسه برای یک ملاقات'
+      tags:
+        - STT
+      operationId: startRecording
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+              properties:
+                encounter_id:
+                  type: integer
+                  example: 123
+                language:
+                  type: string
+                  enum: [fa, en, fa-en]
+                  default: fa
+                  example: 'fa'
+      responses:
+        '200':
+          description: ضبط شروع شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                    example: 'rec_abc123'
+                  status:
+                    type: string
+                    example: 'recording'
+                  websocket_url:
+                    type: string
+                    example: 'wss://api.soapify.com/ws/stt/rec_abc123'
+
+  /stt/upload-chunk/:
+    post:
+      summary: آپلود قطعه صوتی
+      description: 'ارسال بخشی از فایل صوتی برای پردازش'
+      tags:
+        - STT
+      operationId: uploadAudioChunk
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - session_id
+                - chunk_index
+                - audio_chunk
+              properties:
+                session_id:
+                  type: string
+                  example: 'rec_abc123'
+                chunk_index:
+                  type: integer
+                  example: 0
+                audio_chunk:
+                  type: string
+                  format: binary
+                is_final:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: قطعه دریافت شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chunk_id:
+                    type: string
+                    example: 'chunk_123'
+                  transcription:
+                    type: string
+                    example: 'بیمار از سردرد شکایت دارد'
+                  confidence:
+                    type: number
+                    format: float
+                    example: 0.95
+
+  /nlp/generate-draft/:
+    post:
+      summary: تولید پیش‌نویس SOAP
+      description: 'ایجاد پیش‌نویس یادداشت SOAP از رونویسی'
+      tags:
+        - NLP
+      operationId: generateDraft
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+              properties:
+                encounter_id:
+                  type: integer
+                  example: 123
+                template_id:
+                  type: integer
+                  example: 1
+                  description: 'شناسه قالب SOAP'
+                include_checklist:
+                  type: boolean
+                  default: true
+                  description: 'شامل چک‌لیست ارزیابی'
+      responses:
+        '200':
+          description: پیش‌نویس تولید شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  draft_id:
+                    type: string
+                    example: 'draft_456'
+                  soap_sections:
+                    $ref: '#/components/schemas/SOAPSections'
+                  checklist_items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChecklistItem'
+                  confidence_score:
+                    type: number
+                    format: float
+                    example: 0.87
+
+  /checklist/templates/:
+    get:
+      summary: لیست قالب‌های چک‌لیست
+      description: 'دریافت قالب‌های چک‌لیست برای ارزیابی'
+      tags:
+        - Checklist
+      operationId: listChecklistTemplates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: specialty
+          in: query
+          description: 'تخصص پزشکی'
+          schema:
+            type: string
+            enum: [general, cardiology, neurology, pediatrics]
+        - name: active
+          in: query
+          description: 'فقط قالب‌های فعال'
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: لیست قالب‌ها
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChecklistTemplate'
+
+  /outputs/finalize/:
+    post:
+      summary: نهایی‌سازی خروجی
+      description: 'تأیید و نهایی‌سازی یادداشت SOAP'
+      tags:
+        - Outputs
+      operationId: finalizeOutput
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+                - soap_content
+              properties:
+                encounter_id:
+                  type: integer
+                  example: 123
+                soap_content:
+                  $ref: '#/components/schemas/SOAPSections'
+                checklist_responses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      item_id:
+                        type: integer
+                      response:
+                        type: boolean
+                      notes:
+                        type: string
+                format:
+                  type: string
+                  enum: [pdf, docx, html]
+                  default: pdf
+      responses:
+        '200':
+          description: خروجی نهایی شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  output_id:
+                    type: string
+                    example: 'out_789'
+                  file_url:
+                    type: string
+                    example: '/api/outputs/files/out_789.pdf'
+                  share_url:
+                    type: string
+                    example: 'https://soapify.com/share/abc123'
+
+  /integrations/helssa/sync/:
+    post:
+      summary: همگام‌سازی با Helssa
+      description: 'ارسال اطلاعات ملاقات به سیستم Helssa'
+      tags:
+        - Integrations
+      operationId: syncWithHelssa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encounter_id
+              properties:
+                encounter_id:
+                  type: integer
+                  example: 123
+                helssa_patient_id:
+                  type: string
+                  example: 'HLS123456'
+                include_attachments:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: همگام‌سازی موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                    example: 'sync_abc'
+                  helssa_record_id:
+                    type: string
+                    example: 'HLS_REC_789'
+                  status:
+                    type: string
+                    example: 'synced'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    EncounterSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 123
+        patient_name:
+          type: string
+          example: 'علی محمدی'
+        appointment_date:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:30:00Z'
+        chief_complaint:
+          type: string
+          example: 'سردرد و سرگیجه'
+        status:
+          type: string
+          enum: [draft, completed, finalized]
+          example: 'draft'
+        doctor_name:
+          type: string
+          example: 'دکتر احمدی'
+
+    Encounter:
+      allOf:
+        - $ref: '#/components/schemas/EncounterSummary'
+        - type: object
+          properties:
+            patient_phone:
+              type: string
+              example: '+989123456789'
+            patient_age:
+              type: integer
+              example: 35
+            patient_gender:
+              type: string
+              enum: [male, female, other]
+              example: 'male'
+            recordings:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  duration:
+                    type: integer
+                  status:
+                    type: string
+            soap_draft:
+              $ref: '#/components/schemas/SOAPSections'
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    SOAPSections:
+      type: object
+      properties:
+        subjective:
+          type: string
+          example: 'بیمار از سردرد شدید در ناحیه پیشانی شکایت دارد که از دیروز شروع شده'
+        objective:
+          type: string
+          example: 'علائم حیاتی: BP 120/80, HR 75, T 36.8°C. معاینه عصبی طبیعی'
+        assessment:
+          type: string
+          example: 'میگرن احتمالی، نیاز به بررسی بیشتر'
+        plan:
+          type: string
+          example: 'تجویز استامینوفن 500mg، استراحت، مراجعه در صورت عدم بهبود'
+
+    ChecklistTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 'چک‌لیست معاینه عمومی'
+        specialty:
+          type: string
+          example: 'general'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+        version:
+          type: string
+          example: '1.0'
+        is_active:
+          type: boolean
+          example: true
+
+    ChecklistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        category:
+          type: string
+          example: 'معاینه فیزیکی'
+        question:
+          type: string
+          example: 'آیا فشار خون اندازه‌گیری شد؟'
+        required:
+          type: boolean
+          example: true
+        order:
+          type: integer
+          example: 1
+
+tags:
+  - name: Encounters
+    description: 'مدیریت ملاقات‌های پزشکی'
+  - name: STT
+    description: 'تبدیل گفتار به متن'
+  - name: NLP
+    description: 'پردازش زبان طبیعی و تولید پیش‌نویس'
+  - name: Checklist
+    description: 'چک‌لیست‌های ارزیابی'
+  - name: Outputs
+    description: 'نهایی‌سازی و خروجی‌ها'
+  - name: Integrations
+    description: 'یکپارچه‌سازی با سیستم‌های خارجی'
