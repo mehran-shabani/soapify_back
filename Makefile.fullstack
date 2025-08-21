@@ -1,0 +1,117 @@
+# Makefile for SOAPify Full Stack Application
+
+.PHONY: help build up down logs shell migrate test clean
+
+# Default target
+help:
+	@echo "Available commands:"
+	@echo "  make build          - Build all Docker images"
+	@echo "  make up             - Start all services"
+	@echo "  make up-dev         - Start all services with frontend dev server"
+	@echo "  make down           - Stop all services"
+	@echo "  make logs           - View logs from all services"
+	@echo "  make shell-web      - Open shell in web container"
+	@echo "  make shell-db       - Open PostgreSQL shell"
+	@echo "  make migrate        - Run Django migrations"
+	@echo "  make superuser      - Create Django superuser"
+	@echo "  make test           - Run backend tests"
+	@echo "  make frontend-build - Build frontend for production"
+	@echo "  make clean          - Remove volumes and containers"
+
+# Build all Docker images
+build:
+	docker-compose -f docker-compose.fullstack.yml build
+
+# Start all services
+up:
+	docker-compose -f docker-compose.fullstack.yml up -d
+	@echo "Services started!"
+	@echo "Frontend: http://localhost"
+	@echo "Backend API: http://localhost:8000/api"
+	@echo "Admin: http://localhost:8000/admin"
+
+# Start with development frontend
+up-dev:
+	docker-compose -f docker-compose.fullstack.yml --profile dev up -d
+	@echo "Services started in development mode!"
+	@echo "Frontend (dev): http://localhost:3000"
+	@echo "Frontend (prod): http://localhost"
+	@echo "Backend API: http://localhost:8000/api"
+	@echo "Admin: http://localhost:8000/admin"
+
+# Stop all services
+down:
+	docker-compose -f docker-compose.fullstack.yml down
+
+# View logs
+logs:
+	docker-compose -f docker-compose.fullstack.yml logs -f
+
+# Specific service logs
+logs-web:
+	docker-compose -f docker-compose.fullstack.yml logs -f web
+
+logs-frontend:
+	docker-compose -f docker-compose.fullstack.yml logs -f frontend
+
+logs-celery:
+	docker-compose -f docker-compose.fullstack.yml logs -f celery
+
+# Shell access
+shell-web:
+	docker-compose -f docker-compose.fullstack.yml exec web /bin/bash
+
+shell-db:
+	docker-compose -f docker-compose.fullstack.yml exec db psql -U soapify -d soapify
+
+shell-frontend:
+	docker-compose -f docker-compose.fullstack.yml exec frontend-dev /bin/sh
+
+# Django management
+migrate:
+	docker-compose -f docker-compose.fullstack.yml exec web python manage.py migrate
+
+makemigrations:
+	docker-compose -f docker-compose.fullstack.yml exec web python manage.py makemigrations
+
+superuser:
+	docker-compose -f docker-compose.fullstack.yml exec web python manage.py createsuperuser
+
+collectstatic:
+	docker-compose -f docker-compose.fullstack.yml exec web python manage.py collectstatic --noinput
+
+# Testing
+test:
+	docker-compose -f docker-compose.fullstack.yml exec web python manage.py test
+
+test-frontend:
+	docker-compose -f docker-compose.fullstack.yml exec frontend-dev npm test
+
+# Frontend specific
+frontend-install:
+	cd front && npm install
+
+frontend-build:
+	cd front && npm run build
+
+frontend-lint:
+	cd front && npm run lint
+
+# Database operations
+db-backup:
+	docker-compose -f docker-compose.fullstack.yml exec db pg_dump -U soapify soapify > backup_$(shell date +%Y%m%d_%H%M%S).sql
+
+db-restore:
+	@echo "Usage: make db-restore FILE=backup.sql"
+	docker-compose -f docker-compose.fullstack.yml exec -T db psql -U soapify soapify < $(FILE)
+
+# Clean up
+clean:
+	docker-compose -f docker-compose.fullstack.yml down -v
+	docker system prune -f
+
+# Production-like setup with nginx
+up-prod:
+	docker-compose -f docker-compose.fullstack.yml --profile production up -d
+	@echo "Production-like setup started!"
+	@echo "Access via Nginx: http://localhost:8080"
