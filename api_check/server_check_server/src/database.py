@@ -20,13 +20,29 @@ AsyncSessionLocal = sessionmaker(
 )
 
 async def init_db():
-    """Initialize database tables"""
+    """
+    Create all database tables defined on Base.metadata.
+    
+    This async function opens a transactional engine connection and creates any missing tables
+    for the declarative models registered on `Base`. Await this function during application
+    startup to ensure the schema exists before handling requests.
+    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 @asynccontextmanager
 async def get_db_session():
-    """Get database session"""
+    """
+    Asynchronous context manager that yields an AsyncSession for performing database operations.
+    
+    Yields:
+        AsyncSession: an asynchronous SQLAlchemy session from the session factory.
+    
+    Behavior:
+        - Commits the transaction after the caller completes successfully.
+        - Rolls back the transaction and re-raises any exception raised by the caller.
+        - Ensures the session is closed in all cases.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session

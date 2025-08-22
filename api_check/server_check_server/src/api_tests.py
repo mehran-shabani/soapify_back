@@ -12,6 +12,15 @@ from .models import TestRun, VoiceTestResult
 
 class BaseAPITest:
     def __init__(self):
+        """
+        Initialize BaseAPITest with API connection settings.
+        
+        Sets:
+        - base_url from settings.API_BASE_URL
+        - timeout as an httpx.Timeout using settings.API_TIMEOUT
+        - default request headers including a User-Agent
+        - an Authorization Bearer header when settings.API_TOKEN is present
+        """
         self.base_url = settings.API_BASE_URL
         self.timeout = httpx.Timeout(settings.API_TIMEOUT)
         self.headers = {
@@ -28,7 +37,38 @@ class BaseAPITest:
         files: Optional[Dict] = None,
         json_data: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Make HTTP request and capture metrics"""
+        """
+        Perform an asynchronous HTTP request to the API, record timing and response metrics, and return a consolidated test run record.
+        
+        This method builds the full URL from the instance's base_url and the provided endpoint, issues the request using httpx.AsyncClient, and captures:
+        - timestamps (started_at and completed_at in UTC),
+        - response_time_ms (float, milliseconds),
+        - HTTP status_code and a boolean success flag (True for 2xx responses),
+        - response_headers, response_body (parsed as JSON when the response Content-Type starts with "application/json", otherwise as text), and response_size_bytes.
+        If an exception occurs, the returned record will include success=False and error_message instead of response details.
+        
+        Parameters:
+            method: HTTP method (e.g., "GET", "POST").
+            endpoint: Path appended to the configured base_url (should include leading slash if needed).
+            data: Optional form-encoded payload for the request.
+            files: Optional multipart file payload (as expected by httpx).
+            json_data: Optional JSON-serializable payload sent as the request body.
+        
+        Returns:
+            dict: A test_run dictionary containing at minimum:
+                - test_type (str): calling class name
+                - endpoint (str)
+                - method (str)
+                - started_at (datetime, UTC)
+                - completed_at (datetime, UTC)
+                - response_time_ms (float)
+                - status_code (int) [when available]
+                - success (bool)
+                - request_headers, response_headers (dict) [when available]
+                - response_body (dict or str) [when available]
+                - response_size_bytes (int) [when available]
+                - error_message (str) [on exception]
+        """
         url = f"{self.base_url}{endpoint}"
         start_time = time.time()
         
@@ -82,7 +122,20 @@ class VoiceUploadTest(BaseAPITest):
     """Test voice recording upload functionality"""
     
     async def test_upload(self, audio_file_path: str) -> Dict[str, Any]:
-        """Test uploading an audio file"""
+        """
+        Upload a local audio file to the voice upload endpoint and return a structured test result.
+        
+        Reads the file at `audio_file_path`, posts it as multipart/form-data to /api/v1/voice/upload/, and returns the result produced by `make_request`. On a successful upload (HTTP 2xx and a measured response time), the returned dictionary will include a `test_data` entry with:
+        - file_size_bytes: size of the uploaded file in bytes
+        - file_format: file extension without the leading dot
+        - upload_speed_mbps: measured upload throughput in megabits per second
+        
+        Parameters:
+            audio_file_path (str): Path to the local audio file to upload.
+        
+        Returns:
+            Dict[str, Any]: The test run record returned by `make_request`, potentially augmented with `test_data` on success.
+        """
         logger.info(f"Testing voice upload with file: {audio_file_path}")
         
         # Get file info
@@ -127,7 +180,17 @@ class STTTest(BaseAPITest):
     """Test Speech-to-Text functionality"""
     
     async def test_transcription(self, audio_url: str, expected_text: Optional[str] = None) -> Dict[str, Any]:
-        """Test STT transcription"""
+        """
+        Send an audio URL to the STT endpoint and return the API test result, optionally evaluating transcription accuracy.
+        
+        Calls POST /api/v1/stt/transcribe/ with payload {'audio_url': audio_url, 'language': 'fa'} and returns the test-run dictionary produced by make_request. If the request succeeds and expected_text is provided, computes a simple word-level accuracy percentage and attaches a `test_data` dict with keys: `transcription`, `expected_text`, and `accuracy_percent`.
+        Parameters:
+            audio_url (str): Publicly accessible URL of the audio to transcribe.
+            expected_text (Optional[str]): If provided, used to compute a simple accuracy percentage against the returned transcription.
+        
+        Returns:
+            Dict[str, Any]: A test_run dictionary containing request/response metadata produced by make_request; may include `test_data` when accuracy was evaluated.
+        """
         logger.info(f"Testing STT with audio URL: {audio_url}")
         
         data = {
@@ -155,7 +218,20 @@ class STTTest(BaseAPITest):
         return result
     
     def _calculate_text_similarity(self, text1: str, text2: str) -> float:
-        """Simple text similarity calculation"""
+        """
+        Compute a word-level similarity percentage between two texts using the Jaccard index.
+        
+        Performs a case-insensitive, whitespace-based tokenization of each input into unique words,
+        then returns the Jaccard similarity (intersection / union) as a percentage in the range 0.0–100.0.
+        If either text contains no words after tokenization, the function returns 0.0.
+        
+        Parameters:
+            text1 (str): First text to compare.
+            text2 (str): Second text to compare.
+        
+        Returns:
+            float: Similarity percentage (0.0 to 100.0).
+        """
         # This is a basic implementation, can be improved with libraries like difflib
         words1 = set(text1.lower().split())
         words2 = set(text2.lower().split())
@@ -172,7 +248,15 @@ class ChecklistTest(BaseAPITest):
     """Test Checklist functionality"""
     
     async def test_create_checklist(self) -> Dict[str, Any]:
-        """Test creating a new checklist"""
+        """
+        Create a new checklist on the API and return the test run result.
+        
+        Builds a checklist payload with a timestamped title and three items (two incomplete, one completed),
+        sends it as JSON to POST /api/v1/checklists/, and returns the consolidated test-run dictionary
+        produced by make_request (includes timing, status, response body/headers, and success flag).
+        Returns:
+            Dict[str, Any]: Test-run record containing request/response metadata and any parsed response body.
+        """
         logger.info("Testing checklist creation")
         
         data = {
@@ -191,7 +275,19 @@ class ChecklistTest(BaseAPITest):
         )
     
     async def test_update_checklist(self, checklist_id: str) -> Dict[str, Any]:
-        """Test updating a checklist"""
+        """
+        Update a checklist's items by sending a PUT request to the checklist endpoint.
+        
+        Sends a JSON payload that marks two checklist items as completed to /api/v1/checklists/{checklist_id}/
+        and returns the consolidated test run record produced by make_request.
+        
+        Parameters:
+            checklist_id (str): ID of the checklist to update.
+        
+        Returns:
+            Dict[str, Any]: A test_run dictionary containing request/response metrics and fields such as
+            'success', 'status_code', 'response_time_ms', 'response_body', and optionally 'error_message'.
+        """
         logger.info(f"Testing checklist update for ID: {checklist_id}")
         
         data = {
@@ -208,7 +304,27 @@ class ChecklistTest(BaseAPITest):
         )
     
     async def test_get_checklist(self, checklist_id: str) -> Dict[str, Any]:
-        """Test retrieving a checklist"""
+        """
+        Retrieve a checklist by ID and return a consolidated test run record.
+        
+        Parameters:
+            checklist_id (str): Identifier of the checklist to retrieve; used to construct the GET endpoint.
+        
+        Returns:
+            Dict[str, Any]: A test_run dictionary containing metrics and response data (includes keys such as
+                - test_type
+                - endpoint
+                - method
+                - started_at
+                - completed_at
+                - response_time_ms
+                - status_code
+                - success
+                - response_headers
+                - response_body (parsed JSON when applicable)
+                - response_size_bytes
+                - error_message (present on failure)
+        """
         logger.info(f"Testing checklist retrieval for ID: {checklist_id}")
         
         return await self.make_request(
@@ -220,12 +336,35 @@ class LoadTest:
     """Perform load testing on APIs"""
     
     def __init__(self):
+        """
+        Initialize LoadTest by creating instances of the available API test helpers.
+        
+        Creates:
+        - voice_test: VoiceUploadTest instance for voice upload scenarios.
+        - stt_test: STTTest instance for speech-to-text transcription scenarios.
+        - checklist_test: ChecklistTest instance for checklist CRUD scenarios.
+        """
         self.voice_test = VoiceUploadTest()
         self.stt_test = STTTest()
         self.checklist_test = ChecklistTest()
     
     async def run_concurrent_tests(self, test_func, num_concurrent: int = 10) -> List[Dict[str, Any]]:
-        """Run multiple tests concurrently"""
+        """
+        Run the given asynchronous test function concurrently and aggregate basic metrics.
+        
+        Args:
+            test_func: An async callable (no-argument) that performs a single test and returns a dict-like result when awaited. Results that are exceptions (raised during execution) are captured and counted as failures.
+            num_concurrent (int): Number of concurrent invocations to run (default 10).
+        
+        Returns:
+            dict: Aggregated statistics with the following keys:
+                - total_requests (int): Total number of invocations attempted.
+                - successful_requests (int): Count of results that are dict-like and have a truthy 'success' value.
+                - failed_requests (int): Count of invocations that did not meet the success criteria (including exceptions).
+                - avg_response_time_ms (float): Average of available response_time_ms values (0 if none).
+                - min_response_time_ms (float): Minimum response_time_ms observed (0 if none).
+                - max_response_time_ms (float): Maximum response_time_ms observed (0 if none).
+        """
         logger.info(f"Running {num_concurrent} concurrent tests")
         
         tasks = []

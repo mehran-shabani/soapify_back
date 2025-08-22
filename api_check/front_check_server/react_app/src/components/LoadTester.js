@@ -130,6 +130,16 @@ const ChartContainer = styled.div`
   height: 400px;
 `;
 
+/**
+ * LoadTester React component for configuring and running concurrent load tests and visualizing results.
+ *
+ * Renders a UI to choose a service, an operation, and the number of concurrent requests, then runs a load
+ * test using testRunner.runLoadTest. While a test is running inputs are disabled and a toast notification
+ * indicates progress. After completion the component shows aggregated statistics (total, successful, failed,
+ * success rate) and response-time metrics (min, avg, median, max), and plots per-request response times using a line chart.
+ *
+ * @returns {JSX.Element} The load testing UI and results visualization.
+ */
 function LoadTester() {
   const [config, setConfig] = useState({
     service: 'checklist',

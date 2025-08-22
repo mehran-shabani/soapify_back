@@ -84,6 +84,21 @@ const ErrorMessage = styled.div`
   margin-top: 5px;
 `;
 
+/**
+ * Render a list of test result cards (voice upload, STT, checklist) or a "no results" message.
+ *
+ * Renders a titled container showing each result as a card with an overall status (all success,
+ * partial success, or all failed), a formatted timestamp (falls back to the raw value on format error),
+ * and three test sections (Voice Upload, STT, Checklist). Each test section shows a success icon,
+ * available metrics (responseTime, status, fileSize → KB, transcription, checklist id) and any error text.
+ *
+ * @param {Object[]} results - Array of test result objects. Each result may include:
+ *   - timestamp: string|number (displayed via date-fns formatting; raw value used if formatting fails)
+ *   - voice?: { success?: boolean, responseTime?: number, fileSize?: number, status?: any, error?: string }
+ *   - stt?: { success?: boolean, responseTime?: number, status?: any, data?: { transcription?: string }, error?: string }
+ *   - checklist?: { success?: boolean, responseTime?: number, status?: any, data?: { id?: string }, error?: string }
+ * @returns {JSX.Element} A React element displaying the results or a "no results yet" message.
+ */
 function TestResults({ results }) {
   if (!results || results.length === 0) {
     return (
