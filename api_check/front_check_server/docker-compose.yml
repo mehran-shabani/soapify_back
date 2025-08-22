@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  react-app:
+    build:
+      context: ./react_app
+      dockerfile: Dockerfile
+    container_name: soapify_react_tester
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=https://django-m.chbk.app
+      - REACT_APP_SERVER_MONITOR_URL=${SERVER_MONITOR_URL:-http://your-server-ip:8080}
+    restart: unless-stopped
+    networks:
+      - frontend_network
+
+  # Optional: Local file server for test audio files
+  file-server:
+    image: nginx:alpine
+    container_name: test_file_server
+    volumes:
+      - ./test_files:/usr/share/nginx/html:ro
+    ports:
+      - "8081:80"
+    networks:
+      - frontend_network
+
+networks:
+  frontend_network:
+    driver: bridge

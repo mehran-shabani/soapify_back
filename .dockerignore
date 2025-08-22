@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# Django
+*.log
+db.sqlite3
+media/
+staticfiles/
+static/admin/
+static/drf-yasg/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+doc/
+docs/
+*.md
+README*
+
+# Tests
+tests/
+test_*.py
+
+# Other
+.env.*
+uploads/
+outputs/
+logs/
+*.bak
+*.tmp
+node_modules/

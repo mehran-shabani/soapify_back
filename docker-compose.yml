@@ -1,0 +1,195 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: soapify_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-soapify}
+      MYSQL_USER: ${DB_USERNAME:-soapify}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-soapify_password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - soapify_network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: soapify_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - soapify_network
+
+  # Django Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Database settings
+      DB_ENGINE: django.db.backends.mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-soapify}
+      DB_USERNAME: ${DB_USERNAME:-soapify}
+      DB_PASSWORD: ${DB_PASSWORD:-soapify_password}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      # Django settings
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,django-m.chbk.app}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://django-m.chbk.app}
+    volumes:
+      - ./static:/app/static
+      - ./media:/app/media
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - soapify_network
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_celery_worker
+    restart: unless-stopped
+    command: celery -A soapify worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      # Database settings
+      DB_ENGINE: django.db.backends.mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-soapify}
+      DB_USERNAME: ${DB_USERNAME:-soapify}
+      DB_PASSWORD: ${DB_PASSWORD:-soapify_password}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./media:/app/media
+      - ./logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    networks:
+      - soapify_network
+
+  # Celery Beat
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_celery_beat
+    restart: unless-stopped
+    command: celery -A soapify beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      # Database settings
+      DB_ENGINE: django.db.backends.mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-soapify}
+      DB_USERNAME: ${DB_USERNAME:-soapify}
+      DB_PASSWORD: ${DB_PASSWORD:-soapify_password}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    networks:
+      - soapify_network
+
+  # Flower (Celery monitoring)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soapify_flower
+    restart: unless-stopped
+    command: celery -A soapify flower --port=5555
+    env_file:
+      - .env
+    environment:
+      # Database settings
+      DB_ENGINE: django.db.backends.mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-soapify}
+      DB_USERNAME: ${DB_USERNAME:-soapify}
+      DB_PASSWORD: ${DB_PASSWORD:-soapify_password}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    networks:
+      - soapify_network
+
+  # Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: soapify_nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./static:/var/www/static:ro
+      - ./media:/var/www/media:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    networks:
+      - soapify_network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  soapify_network:
+    driver: bridge
