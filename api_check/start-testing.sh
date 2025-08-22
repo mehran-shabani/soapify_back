@@ -1,91 +1,108 @@
 #!/bin/bash
 
-echo "🚀 Starting Soapify API Testing System"
-echo "======================================"
+# Soapify API Tester - Unified Application Startup Script
 
-# Colors for output
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+set -e
 
-# check_service reports whether the previously run command succeeded for the given service name and exits with status 1 on failure.
-check_service() {
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ $1 started successfully${NC}"
-    else
-        echo -e "${RED}✗ Failed to start $1${NC}"
-        exit 1
-    fi
-}
+echo "🚀 Soapify API Tester - Unified Application"
+echo "=========================================="
+echo ""
 
-# Check if running on server or local
-echo -e "${BLUE}Where are you running this script?${NC}"
-echo "1) On the server (for monitoring)"
-echo "2) On local machine (for testing)"
-read -p "Enter your choice (1 or 2): " choice
+# Check if Node.js is installed
+if ! command -v node &> /dev/null; then
+    echo "❌ Node.js is not installed. Please install Node.js 16+ and npm."
+    echo "   Visit: https://nodejs.org/"
+    exit 1
+fi
+
+# Check Node.js version
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 16 ]; then
+    echo "❌ Node.js version 16+ is required. Current version: $(node -v)"
+    echo "   Please update Node.js from: https://nodejs.org/"
+    exit 1
+fi
+
+echo "✅ Node.js $(node -v) detected"
+echo "✅ npm $(npm -v) detected"
+echo ""
+
+# Navigate to the React app directory
+cd soapify-api-tester
+
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo "📦 Installing dependencies..."
+    npm install --legacy-peer-deps
+    echo "✅ Dependencies installed successfully"
+    echo ""
+else
+    echo "✅ Dependencies already installed"
+    echo ""
+fi
+
+# Check if API endpoints file exists
+if [ ! -f "../api_endpoints_checklist.json" ]; then
+    echo "❌ API endpoints file not found: ../api_endpoints_checklist.json"
+    echo "   This file contains the complete API endpoint catalog."
+    exit 1
+fi
+
+echo "✅ API endpoints catalog found ($(jq '.api_endpoints | length' ../api_endpoints_checklist.json) categories)"
+echo ""
+
+# Display startup options
+echo "🎯 Startup Options:"
+echo "1. Start Development Server (Hot Reload)"
+echo "2. Build and Serve Production Version"
+echo "3. Run Tests"
+echo "4. Exit"
+echo ""
+
+read -p "Select option (1-4): " choice
 
 case $choice in
     1)
-        echo -e "${YELLOW}Starting Server Monitoring...${NC}"
-        cd server_check_server
-        
-        # Check if .env exists
-        if [ ! -f .env ]; then
-            echo -e "${YELLOW}Creating .env file...${NC}"
-            cp .env.example .env 2>/dev/null || echo "No .env.example found"
-            echo -e "${YELLOW}Please edit .env file with your settings${NC}"
-            read -p "Press enter when ready..."
-        fi
-        
-        # Start services
-        docker-compose up -d
-        check_service "Server Monitoring"
-        
-        echo -e "${GREEN}Server monitoring is running!${NC}"
-        echo -e "Dashboard: ${BLUE}http://localhost:8080${NC}"
-        echo -e "Prometheus: ${BLUE}http://localhost:9090${NC}"
-        echo -e "Grafana: ${BLUE}http://localhost:3000${NC}"
+        echo ""
+        echo "🚀 Starting development server..."
+        echo "   - Application will be available at: http://localhost:3000"
+        echo "   - Grant microphone permissions when prompted"
+        echo "   - Press Ctrl+C to stop the server"
+        echo ""
+        echo "📊 Features Available:"
+        echo "   ✅ Real-time API testing"
+        echo "   ✅ Audio recording during tests"
+        echo "   ✅ Performance analytics"
+        echo "   ✅ Resume interrupted sessions"
+        echo "   ✅ Export results (JSON/CSV)"
+        echo ""
+        npm start
         ;;
-        
     2)
-        echo -e "${YELLOW}Starting Frontend Testing...${NC}"
-        cd front_check_server
-        
-        # Check if .env exists
-        if [ ! -f .env ]; then
-            echo -e "${YELLOW}Creating .env file...${NC}"
-            cp .env.example .env
-            echo -e "${RED}IMPORTANT: Edit .env file and set SERVER_MONITOR_URL to your server address${NC}"
-            read -p "Press enter when ready..."
-        fi
-        
-        # Start services
-        docker-compose up -d
-        check_service "Frontend Testing"
-        
-        echo -e "${GREEN}Frontend testing app is running!${NC}"
-        echo -e "React App: ${BLUE}http://localhost:3000${NC}"
-        echo -e "File Server: ${BLUE}http://localhost:8081${NC}"
-        
-        # Check server connection
-        echo -e "\n${YELLOW}Checking connection to monitoring server...${NC}"
-        SERVER_URL=$(grep SERVER_MONITOR_URL .env | cut -d '=' -f2)
-        if curl -s "$SERVER_URL/api/metrics/system" > /dev/null; then
-            echo -e "${GREEN}✓ Connected to monitoring server${NC}"
-        else
-            echo -e "${RED}✗ Cannot connect to monitoring server at $SERVER_URL${NC}"
-            echo -e "${YELLOW}Make sure the server monitoring is running and accessible${NC}"
-        fi
+        echo ""
+        echo "🔨 Building production version..."
+        npm run build
+        echo "✅ Build completed successfully"
+        echo ""
+        echo "🚀 Starting production server..."
+        echo "   - Application will be available at: http://localhost:3000"
+        echo "   - Press Ctrl+C to stop the server"
+        echo ""
+        npm run serve
         ;;
-        
+    3)
+        echo ""
+        echo "🧪 Running tests..."
+        npm test
+        ;;
+    4)
+        echo ""
+        echo "👋 Goodbye!"
+        exit 0
+        ;;
     *)
-        echo -e "${RED}Invalid choice. Please run the script again.${NC}"
+        echo ""
+        echo "❌ Invalid option. Please run the script again and select 1-4."
         exit 1
         ;;
 esac
-
-echo -e "\n${GREEN}Setup complete!${NC}"
-echo -e "${YELLOW}To view logs: docker-compose logs -f${NC}"
-echo -e "${YELLOW}To stop: docker-compose down${NC}"
