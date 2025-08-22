@@ -13,12 +13,41 @@ load_dotenv(find_dotenv())
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-CSRF_TRUSTED_ORIGINS = [o for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o]
+ALLOWED_HOSTS = ['*']
+# cors --------------------
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://medogram.ir',
+    'https://helssa.ir',
+    'https://django-med.chbk.app',
+    'https://django-m.chbk.app',
+]
+
+CORS_ALLOW_HEADERS = [
+    'authorization',
+    'content-type',
+    'x-csrftoken',
+    'accept'
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://django-med.chbk.app",
+    "https://django-m.chbk.app",
+]
+
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+ROOT_URLCONF = 'medogram.urls'
+
+
 
 # -----------------------
 # Apps
-# -----------------------
+# -----------------------then
 INSTALLED_APPS = [
     # Django
     'django.contrib.admin',
@@ -34,6 +63,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'drf_yasg',
+    
 
     # Project apps
     'accounts',
@@ -56,16 +86,18 @@ INSTALLED_APPS = [
 # Middleware
 # -----------------------
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'infra.middleware.HMACMiddleware',
-
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "infra.middleware.HMACMiddleware",
+    "infra.middleware.RateLimitMiddleware",
+    "infra.middleware.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "infra.middleware.csrf_exempt.CSRFFreeAPIMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = 'soapify.urls'
@@ -94,9 +126,9 @@ ASGI_APPLICATION = 'soapify.asgi.application'
 # حالت پیش‌فرض: SQLite (DEV)؛ اگر DATABASE_URL ست باشد، از آن استفاده می‌شود.
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': os.getenv('DB_NAME', str(BASE_DIR / 'db.sqlite3')),
-        'USER': os.getenv('DB_USER', ''),
+        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.mysql'),
+        'NAME': os.getenv('DB_DATABASE', str(BASE_DIR / 'db.sqlite3')),
+        'USER': os.getenv('DB_USERNAME', ''),
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', ''),
         'PORT': os.getenv('DB_PORT', ''),
@@ -128,7 +160,7 @@ USE_TZ = True
 # Static / Media
 # -----------------------
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = BASE_DIR / 'static'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

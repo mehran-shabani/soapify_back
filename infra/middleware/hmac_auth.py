@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 
-class HMACAuthMiddleware(MiddlewareMixin):
+class HMACMiddleware(MiddlewareMixin):
     """
     HMAC authentication for inter-service communication
     """

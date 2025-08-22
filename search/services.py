@@ -1,504 +1,306 @@
+# search/services.py
 """
-Search services for SOAPify.
+Search services for SOAPify (MySQL FULLTEXT + Embeddings rerank).
 """
+from __future__ import annotations
+
 import time
+import math
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from functools import reduce
+from operator import or_ as OR
+
 from django.db import models
+from django.db.models.expressions import RawSQL
 from django.db.models import Q
-from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.contrib.auth import get_user_model
 
 from .models import SearchableContent, SearchQuery as SearchQueryModel, SearchResult
-from embeddings.services import EmbeddingService
+from embeddings.models import TextEmbedding, EMBED_DIM
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
 class SearchService:
-    """Simple wrapper delegating to hybrid search for backward compatibility in tests."""
+    """Thin wrapper delegating to HybridSearchService (backward-compat for tests)."""
     def __init__(self):
-        self._hybrid = None
+        self._hybrid = HybridSearchService()
 
     def search(self, *args, **kwargs):
-        if self._hybrid is None:
-            self._hybrid = HybridSearchService()
         # Return only the results list for compatibility with tests
-        return [r for r in self._hybrid.search(*args, **kwargs).get('results', [])]
+        return [r for r in self._hybrid.search(*args, **kwargs).get("results", [])]
 
 
 class HybridSearchService:
-    """Hybrid search service combining full-text search and semantic search."""
-    
+    """Hybrid search service combining FULLTEXT (MySQL) and semantic rerank."""
+
     def __init__(self):
-        self.embedding_service = EmbeddingService()
-        self.fts_weight = 0.6  # Weight for full-text search
-        self.semantic_weight = 0.4  # Weight for semantic search
-    
-    def search(self, query_text: str, user: Optional[User] = None, 
-               filters: Optional[Dict[str, Any]] = None, limit: int = 20) -> Dict[str, Any]:
+        # وزن‌دهی نهایی (کازاین کوچک‌تر بهتر؛ تبدیل به similarity می‌کنیم)
+        self.fts_weight = 0.6
+        self.semantic_weight = 0.4
+
+    # ---------- Public API ----------
+    def search(
+        self,
+        query_text: str,
+        user: Optional[User] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 20,
+        boolean_mode: bool = True,
+        candidate_limit: int = 300,
+    ) -> Dict[str, Any]:
         """
-        Perform hybrid search combining FTS and semantic search.
-        
-        Args:
-            query_text: Search query
-            user: User performing the search
-            filters: Optional filters (encounter_id, content_type, etc.)
-            limit: Maximum number of results
-        
-        Returns:
-            Dict with search results and metadata
+        1) FULLTEXT روی SearchableContent (کاندیدا)
+        2) ریرنک کاندیدا با امبدینگ‌ها (cosine)
+        3) ترکیب امتیازها
         """
         start_time = time.time()
-        
         if not query_text or not query_text.strip():
-            return {
-                'results': [],
-                'total_count': 0,
-                'execution_time_ms': 0,
-                'query': query_text
-            }
-        
+            return {"results": [], "total_count": 0, "execution_time_ms": 0, "query": query_text}
+
         filters = filters or {}
-        
-        # Perform full-text search
-        fts_results = self._full_text_search(query_text, filters, limit)
-        
-        # Perform semantic search
-        semantic_results = self._semantic_search(query_text, filters, limit)
-        
-        # Combine and rank results
-        combined_results = self._combine_search_results(
-            fts_results, semantic_results, query_text, limit
-        )
-        
-        # Calculate execution time
+
+        # 1) FULLTEXT candidates
+        fts_candidates = self._full_text_candidates(query_text, filters, candidate_limit, boolean_mode)
+
+        # اگر هیچ کاندیدایی نیست، خالی برگرد
+        if not fts_candidates:
+            exec_ms = int((time.time() - start_time) * 1000)
+            sq = SearchQueryModel.objects.create(
+                query_text=query_text, filters=filters, user=user, results_count=0, execution_time_ms=exec_ms
+            )
+            return {
+                "results": [],
+                "total_count": 0,
+                "execution_time_ms": exec_ms,
+                "query": query_text,
+                "filters": filters,
+                "search_id": sq.id,
+            }
+
+        # 2) semantic rerank روی همین کاندیداها
+        semantic_scored = self._semantic_rerank(query_text, fts_candidates)
+
+        # 3) ترکیب امتیازها
+        combined_results = self._combine_results(fts_candidates, semantic_scored, limit)
+
+        # زمان اجرا
         execution_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Store search query for analytics
+
+        # ذخیرهٔ کوئری برای آنالیتیکس
         search_query_obj = SearchQueryModel.objects.create(
             query_text=query_text,
             filters=filters,
             user=user,
             results_count=len(combined_results),
-            execution_time_ms=execution_time_ms
+            execution_time_ms=execution_time_ms,
         )
-        
-        # Cache results
+
+        # کش نتایج
         self._cache_search_results(search_query_obj, combined_results)
-        
+
         return {
-            'results': combined_results,
-            'total_count': len(combined_results),
-            'execution_time_ms': execution_time_ms,
-            'query': query_text,
-            'filters': filters,
-            'search_id': search_query_obj.id
+            "results": combined_results,
+            "total_count": len(combined_results),
+            "execution_time_ms": execution_time_ms,
+            "query": query_text,
+            "filters": filters,
+            "search_id": search_query_obj.id,
         }
-    
-    def _full_text_search(self, query_text: str, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
-        """Perform full-text search using PostgreSQL."""
+
+    # ---------- Internal: FULLTEXT ----------
+    def _full_text_candidates(
+        self,
+        query_text: str,
+        filters: Dict[str, Any],
+        candidate_limit: int,
+        boolean_mode: bool,
+    ) -> List[Dict[str, Any]]:
+        """کوئری FULLTEXT با MATCH ... AGAINST روی ستون generated: fulltext_all"""
         try:
-            # Build queryset
-            queryset = SearchableContent.objects.all()
-            
-            # Apply filters
-            if filters.get('encounter_id'):
-                queryset = queryset.filter(encounter_id=filters['encounter_id'])
-            
-            if filters.get('content_type'):
-                content_types = filters['content_type']
-                if isinstance(content_types, str):
-                    content_types = [content_types]
-                queryset = queryset.filter(content_type__in=content_types)
-            
-            if filters.get('date_from'):
-                queryset = queryset.filter(created_at__gte=filters['date_from'])
-            
-            if filters.get('date_to'):
-                queryset = queryset.filter(created_at__lte=filters['date_to'])
-            
-            # Perform full-text search
-            search_query = SearchQuery(query_text)
-            search_vector = SearchVector('title', weight='A') + SearchVector('content', weight='B')
-            
-            results = queryset.annotate(
-                search=search_vector,
-                rank=SearchRank(search_vector, search_query)
-            ).filter(
-                search=search_query
-            ).order_by('-rank')[:limit]
-            
-            # Format results
-            formatted_results = []
-            for result in results:
-                formatted_results.append({
-                    'id': result.id,
-                    'encounter_id': result.encounter_id,
-                    'content_type': result.content_type,
-                    'content_id': result.content_id,
-                    'title': result.title,
-                    'content': result.content,
-                    'snippet': self._generate_snippet(result.content, query_text),
-                    'score': float(result.rank) if result.rank else 0.0,
-                    'search_type': 'full_text',
-                    'metadata': result.metadata,
-                    'created_at': result.created_at
+            qs = SearchableContent.objects.all()
+
+            # فیلترها
+            if filters.get("encounter_id"):
+                qs = qs.filter(encounter_id=filters["encounter_id"])
+            if filters.get("content_type"):
+                cts = filters["content_type"]
+                if isinstance(cts, str):
+                    cts = [cts]
+                qs = qs.filter(content_type__in=cts)
+            if filters.get("date_from"):
+                qs = qs.filter(created_at__gte=filters["date_from"])
+            if filters.get("date_to"):
+                qs = qs.filter(created_at__lte=filters["date_to"])
+
+            mode_sql = "IN BOOLEAN MODE" if boolean_mode else "IN NATURAL LANGUAGE MODE"
+            raw = RawSQL(f"MATCH(fulltext_all) AGAINST (%s {mode_sql})", (query_text,))
+
+            results = (
+                qs.annotate(relevance=raw)
+                  .filter(relevance__gt=0)
+                  .only("id", "encounter_id", "content_type", "content_id", "title", "content", "metadata")
+                  .order_by("-relevance", "-created_at")[:candidate_limit]
+                  .values("id", "encounter_id", "content_type", "content_id", "title", "content", "metadata", "relevance")
+            )
+
+            # شکل استاندارد خروجی کاندیدا برای مرحلهٔ semantic
+            formatted = []
+            for r in results:
+                formatted.append({
+                    "id": r["id"],  # id جدول SearchableContent
+                    "encounter_id": r["encounter_id"],
+                    "content_type": r["content_type"],
+                    "content_id": r["content_id"],
+                    "title": r["title"],
+                    "content": r["content"],
+                    "metadata": r["metadata"],
+                    "keyword_relevance": float(r["relevance"]),
                 })
-            
-            return formatted_results
-        
+            return formatted
+
         except Exception as e:
-            logger.error(f"Full-text search failed: {str(e)}")
+            logger.error(f"FULLTEXT search failed: {e}")
             return []
-    
-    def _semantic_search(self, query_text: str, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
-        """Perform semantic search using embeddings."""
-        try:
-            # Get content types for embedding search
-            content_types = None
-            if filters.get('content_type'):
-                content_types = filters['content_type']
-                if isinstance(content_types, str):
-                    content_types = [content_types]
-            
-            # Perform similarity search
-            similar_content = self.embedding_service.similarity_search(
-                query_text=query_text,
-                encounter_id=filters.get('encounter_id'),
-                content_types=content_types,
-                limit=limit,
-                threshold=0.5  # Lower threshold for broader results
-            )
-            
-            # Format results to match FTS format
-            formatted_results = []
-            for item in similar_content:
-                # Get the corresponding searchable content
-                try:
-                    searchable_content = SearchableContent.objects.get(
-                        content_type=item['content_type'],
-                        content_id=item['content_id']
-                    )
-                    
-                    formatted_results.append({
-                        'id': searchable_content.id,
-                        'encounter_id': item['encounter_id'],
-                        'content_type': item['content_type'],
-                        'content_id': item['content_id'],
-                        'title': searchable_content.title,
-                        'content': item['text_content'],
-                        'snippet': self._generate_snippet(item['text_content'], query_text),
-                        'score': item['similarity_score'],
-                        'search_type': 'semantic',
-                        'metadata': searchable_content.metadata,
-                        'created_at': item['created_at']
-                    })
-                
-                except SearchableContent.DoesNotExist:
-                    # Skip if searchable content not found
-                    continue
-            
-            return formatted_results
-        
-        except Exception as e:
-            logger.error(f"Semantic search failed: {str(e)}")
-            return []
-    
-    def _combine_search_results(self, fts_results: List[Dict], semantic_results: List[Dict], 
-                               query_text: str, limit: int) -> List[Dict[str, Any]]:
-        """Combine and rank results from both search methods."""
-        # Create a dictionary to track unique results
-        combined_dict = {}
-        
-        # Add FTS results
-        for result in fts_results:
-            key = f"{result['content_type']}:{result['content_id']}"
-            result['combined_score'] = result['score'] * self.fts_weight
-            combined_dict[key] = result
-        
-        # Add semantic results (merge if already exists)
-        for result in semantic_results:
-            key = f"{result['content_type']}:{result['content_id']}"
-            
-            if key in combined_dict:
-                # Combine scores
-                existing = combined_dict[key]
-                semantic_score = result['score'] * self.semantic_weight
-                existing['combined_score'] += semantic_score
-                existing['search_type'] = 'hybrid'
-                
-                # Use better snippet if semantic search provides more context
-                if len(result['snippet']) > len(existing['snippet']):
-                    existing['snippet'] = result['snippet']
+
+    # ---------- Internal: Semantic rerank ----------
+    def _semantic_rerank(self, query_text: str, candidates: List[Dict[str, Any]]) -> Dict[Tuple[int, str, int], float]:
+        """
+        بر اساس امبدینگ: distance (کوچک‌تر بهتر). خروجی: map از key=(encounter_id, content_type, content_id) به distance
+        """
+        # 1) ساخت امبدینگ کوئری (اینجا فرض می‌کنیم در جای دیگری ساخته می‌شود)
+        # اگر سرویسی دارید که امبدینگ می‌سازد، اینجا فراخوانی کنید و بردار را بگیرید.
+        # برای مستقل بودن این فایل، یک نمونهٔ ساده/جعلی می‌گذاریم که حتماً جایگزین کنید:
+        query_vec = self._make_query_embedding(query_text)
+
+        # 2) خواندن امبدینگ کاندیداها
+        keys = [(c["encounter_id"], c["content_type"], c["content_id"]) for c in candidates]
+        if not keys:
+            return {}
+
+        q_or = reduce(OR, (Q(encounter_id=e, content_type=ct, content_id=cid) for e, ct, cid in keys))
+        embedding_rows = TextEmbedding.objects.filter(q_or).only(
+            "encounter_id", "content_type", "content_id", "embedding_vector"
+        )
+
+        emb_map: Dict[Tuple[int, str, int], List[float]] = {}
+        for row in embedding_rows:
+            emb_map[(row.encounter_id, row.content_type, row.content_id)] = row.embedding_vector
+
+        # 3) محاسبهٔ فاصله کازاین
+        distances: Dict[Tuple[int, str, int], float] = {}
+        for key in keys:
+            emb = emb_map.get(key)
+            if not emb:
+                continue
+            distances[key] = _cosine_distance(emb, query_vec)
+        return distances
+
+    # ---------- Internal: Combine ----------
+    def _combine_results(
+        self,
+        fts_candidates: List[Dict[str, Any]],
+        semantic_dist: Dict[Tuple[int, str, int], float],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        ترکیب: similarity_sem = 1 - distance (clamped to [0,1])، سپس
+        combined = w_ft * norm(keyword_relevance) + w_sem * similarity_sem
+        """
+        # نرمال‌سازی سادهٔ امتیاز FULLTEXT بین 0..1
+        if fts_candidates:
+            max_kw = max(c["keyword_relevance"] for c in fts_candidates) or 1.0
+        else:
+            max_kw = 1.0
+
+        results = []
+        for c in fts_candidates:
+            key = (c["encounter_id"], c["content_type"], c["content_id"])
+            dist = semantic_dist.get(key)
+            if dist is None:
+                # اگر امبدینگی نیافتیم، فقط FULLTEXT را لحاظ می‌کنیم
+                sem_sim = 0.0
             else:
-                # Add as new result
-                result['combined_score'] = result['score'] * self.semantic_weight
-                combined_dict[key] = result
-        
-        # Convert back to list and sort by combined score
-        combined_results = list(combined_dict.values())
-        combined_results.sort(key=lambda x: x['combined_score'], reverse=True)
-        
-        return combined_results[:limit]
-    
+                sem_sim = max(0.0, min(1.0, 1.0 - float(dist)))  # 1 - distance
+
+            kw_norm = float(c["keyword_relevance"]) / max_kw
+            combined = kw_norm * self.fts_weight + sem_sim * self.semantic_weight
+
+            results.append({
+                "id": c["id"],
+                "encounter_id": c["encounter_id"],
+                "content_type": c["content_type"],
+                "content_id": c["content_id"],
+                "title": c["title"],
+                "content": c["content"],
+                "snippet": self._generate_snippet(c["content"], ""),  # می‌تونی query_text پاس بدی برای هایلایت
+                "score": float(kw_norm),                # امتیاز raw کیورد
+                "semantic_similarity": float(sem_sim),  # شباهت 0..1
+                "combined_score": float(combined),
+                "search_type": "hybrid" if dist is not None else "full_text",
+                "metadata": c.get("metadata") or {},
+                "created_at": None,  # اختیاری
+            })
+
+        results.sort(key=lambda x: x["combined_score"], reverse=True)
+        return results[:limit]
+
+    # ---------- Helpers ----------
     def _generate_snippet(self, content: str, query_text: str, max_length: int = 200) -> str:
-        """Generate a snippet highlighting the query terms."""
-        if not content or not query_text:
-            return content[:max_length] if content else ""
-        
-        # Simple snippet generation - find first occurrence of query terms
-        content_lower = content.lower()
-        query_terms = query_text.lower().split()
-        
-        best_position = 0
-        best_score = 0
-        
-        # Find position with most query terms
-        for i in range(0, len(content) - max_length, 20):
-            chunk = content_lower[i:i + max_length]
-            score = sum(1 for term in query_terms if term in chunk)
-            
-            if score > best_score:
-                best_score = score
-                best_position = i
-        
-        # Extract snippet
-        snippet = content[best_position:best_position + max_length]
-        
-        # Add ellipsis if needed
-        if best_position > 0:
-            snippet = "..." + snippet
-        if best_position + max_length < len(content):
-            snippet = snippet + "..."
-        
-        return snippet.strip()
-    
-    def _cache_search_results(self, search_query_obj: SearchQueryModel, results: List[Dict]):
-        """Cache search results for future use."""
+        if not content:
+            return ""
+        # ساده: ابتدای متن را برمی‌گردانیم؛ می‌توانی مثل قبل sliding-window با هایلایت کلمات بسازی
+        snippet = content[:max_length]
+        if len(content) > max_length:
+            snippet += "..."
+        return snippet
+
+    def _cache_search_results(self, search_query_obj: SearchQueryModel, results: List[Dict[str, Any]]):
         try:
-            # Clear existing cached results
             SearchResult.objects.filter(query=search_query_obj).delete()
-            
-            # Create new cached results
-            cached_results = []
-            for rank, result in enumerate(results, 1):
+            bulk = []
+            for rank, r in enumerate(results, 1):
                 try:
-                    searchable_content = SearchableContent.objects.get(
-                        id=result['id']
-                    )
-                    
-                    cached_results.append(SearchResult(
-                        query=search_query_obj,
-                        content=searchable_content,
-                        relevance_score=result['combined_score'],
-                        rank=rank,
-                        snippet=result['snippet']
-                    ))
-                
+                    sc = SearchableContent.objects.get(id=r["id"])
                 except SearchableContent.DoesNotExist:
                     continue
-            
-            # Bulk create cached results
-            if cached_results:
-                SearchResult.objects.bulk_create(cached_results)
-        
+                bulk.append(SearchResult(
+                    query=search_query_obj,
+                    content=sc,
+                    relevance_score=r["combined_score"],
+                    rank=rank,
+                    snippet=r["snippet"],
+                ))
+            if bulk:
+                SearchResult.objects.bulk_create(bulk)
         except Exception as e:
-            logger.error(f"Failed to cache search results: {str(e)}")
-    
-    def index_content(self, encounter_id: int, content_type: str, content_id: int, 
-                     title: str, content: str, metadata: Optional[Dict] = None) -> SearchableContent:
+            logger.error(f"Failed to cache search results: {e}")
+
+    # ---- Fake/simple embedding for query (جایگزین با سرویس واقعی) ----
+    def _make_query_embedding(self, text: str) -> List[float]:
         """
-        Index content for search.
-        
-        Args:
-            encounter_id: ID of the encounter
-            content_type: Type of content
-            content_id: ID of the content object
-            title: Title of the content
-            content: Content text
-            metadata: Optional metadata
-        
-        Returns:
-            SearchableContent object
+        TODO: این تابع را با سرویس واقعی ساخت امبدینگ (OpenAI/HF) جایگزین کنید.
+        فعلاً بردار واحد با hashing ساده تولید می‌کند تا روند کامل باشد.
         """
-        try:
-            searchable_content, created = SearchableContent.objects.update_or_create(
-                content_type=content_type,
-                content_id=content_id,
-                defaults={
-                    'encounter_id': encounter_id,
-                    'title': title,
-                    'content': content,
-                    'metadata': metadata or {}
-                }
-            )
-            
-            # Update search vector
-            search_vector = SearchVector('title', weight='A') + SearchVector('content', weight='B')
-            SearchableContent.objects.filter(id=searchable_content.id).update(
-                search_vector=search_vector
-            )
-            
-            logger.info(f"{'Created' if created else 'Updated'} searchable content for {content_type}:{content_id}")
-            return searchable_content
-        
-        except Exception as e:
-            logger.error(f"Failed to index content: {str(e)}")
-            raise
-    
-    def reindex_encounter(self, encounter_id: int) -> Dict[str, int]:
-        """
-        Reindex all content for an encounter.
-        
-        Args:
-            encounter_id: ID of the encounter to reindex
-        
-        Returns:
-            Dict with counts of indexed content by type
-        """
-        from encounters.models import Encounter
-        
-        try:
-            encounter = Encounter.objects.get(id=encounter_id)
-        except Encounter.DoesNotExist:
-            raise ValueError(f"Encounter {encounter_id} not found")
-        
-        results = {
-            'transcript': 0,
-            'soap': 0,
-            'checklist': 0,
-            'notes': 0
-        }
-        
-        # Index transcript segments
-        for segment in encounter.transcript_segments.all():
-            if segment.text and len(segment.text.strip()) > 10:
-                self.index_content(
-                    encounter_id=encounter_id,
-                    content_type='transcript',
-                    content_id=segment.id,
-                    title=f"Transcript Segment {segment.id}",
-                    content=segment.text,
-                    metadata={
-                        'start_time': segment.start_time,
-                        'end_time': segment.end_time,
-                        'speaker': getattr(segment, 'speaker', None)
-                    }
-                )
-                results['transcript'] += 1
-        
-        # Index SOAP drafts and final
-        for draft in encounter.soap_drafts.all():
-            if draft.content:
-                combined_content = self._combine_soap_sections(draft.content)
-                if combined_content:
-                    self.index_content(
-                        encounter_id=encounter_id,
-                        content_type='soap',
-                        content_id=draft.id,
-                        title=f"SOAP Draft {draft.id}",
-                        content=combined_content,
-                        metadata={
-                            'version': draft.version,
-                            'is_final': False
-                        }
-                    )
-                    results['soap'] += 1
-        
-        # Index final artifacts
-        if hasattr(encounter, 'final_artifacts') and encounter.final_artifacts:
-            artifacts = encounter.final_artifacts
-            if artifacts.soap_content:
-                combined_content = self._combine_soap_sections(artifacts.soap_content)
-                if combined_content:
-                    self.index_content(
-                        encounter_id=encounter_id,
-                        content_type='soap',
-                        content_id=artifacts.id,
-                        title=f"Final SOAP - Encounter {encounter_id}",
-                        content=combined_content,
-                        metadata={
-                            'is_final': True,
-                            'exported_at': artifacts.created_at.isoformat() if artifacts.created_at else None
-                        }
-                    )
-                    results['soap'] += 1
-        
-        # Index checklist evaluations
-        for eval_obj in encounter.checklist_evals.all():
-            if eval_obj.evidence_text:
-                self.index_content(
-                    encounter_id=encounter_id,
-                    content_type='checklist',
-                    content_id=eval_obj.id,
-                    title=f"Checklist: {eval_obj.catalog_item.title}",
-                    content=eval_obj.evidence_text,
-                    metadata={
-                        'status': eval_obj.status,
-                        'confidence_score': eval_obj.confidence_score,
-                        'category': eval_obj.catalog_item.category
-                    }
-                )
-                results['checklist'] += 1
-        
-        logger.info(f"Reindexed encounter {encounter_id}: {results}")
-        return results
-    
-    def _combine_soap_sections(self, soap_content: Dict[str, Any]) -> str:
-        """Combine SOAP sections into searchable text."""
-        sections = []
-        
-        for section_name, section_data in soap_content.items():
-            if isinstance(section_data, dict) and 'content' in section_data:
-                sections.append(f"{section_name.upper()}:\\n{section_data['content']}")
-            elif isinstance(section_data, str):
-                sections.append(f"{section_name.upper()}:\\n{section_data}")
-        
-        return "\\n\\n".join(sections)
-    
-    def get_search_analytics(self, days: int = 30) -> Dict[str, Any]:
-        """
-        Get search analytics for the specified number of days.
-        
-        Args:
-            days: Number of days to analyze
-        
-        Returns:
-            Dict with analytics data
-        """
-        from datetime import datetime, timedelta
-        
-        cutoff_date = datetime.now() - timedelta(days=days)
-        
-        queries = SearchQueryModel.objects.filter(created_at__gte=cutoff_date)
-        
-        total_searches = queries.count()
-        avg_execution_time = queries.aggregate(
-            avg_time=models.Avg('execution_time_ms')
-        )['avg_time'] or 0
-        
-        # Top queries
-        top_queries = queries.values('query_text').annotate(
-            count=models.Count('id')
-        ).order_by('-count')[:10]
-        
-        # Search patterns by content type
-        content_type_stats = {}
-        for query in queries:
-            filters = query.filters
-            content_types = filters.get('content_type', ['all'])
-            if isinstance(content_types, str):
-                content_types = [content_types]
-            
-            for content_type in content_types:
-                content_type_stats[content_type] = content_type_stats.get(content_type, 0) + 1
-        
-        return {
-            'total_searches': total_searches,
-            'avg_execution_time_ms': round(avg_execution_time, 2),
-            'top_queries': list(top_queries),
-            'content_type_distribution': content_type_stats,
-            'period_days': days
-        }
+        import random
+        random.seed(hash(text) & 0xFFFFFFFF)
+        vec = [random.random() for _ in range(EMBED_DIM)]
+        # unit normalize
+        s = math.sqrt(sum(x*x for x in vec)) or 1.0
+        return [x / s for x in vec]
+
+
+def _cosine_distance(a: List[float], b: List[float]) -> float:
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        fx = float(x); fy = float(y)
+        dot += fx * fy
+        na += fx * fx
+        nb += fy * fy
+    na = math.sqrt(na) or 1.0
+    nb = math.sqrt(nb) or 1.0
+    return 1.0 - (dot / (na * nb))

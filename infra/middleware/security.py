@@ -1,7 +1,5 @@
-import hashlib
 import secrets
 from django.utils.deprecation import MiddlewareMixin
-from django.http import HttpResponse
 from django.conf import settings
 
 
