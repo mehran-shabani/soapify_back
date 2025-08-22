@@ -59,6 +59,29 @@ const GlobalStyle = styled.div`
   }
 `;
 
+/**
+ * Root React component for the Soapify API Tester single-page application.
+ *
+ * Initializes application services and state, attempts to resume a previous test session,
+ * loads API endpoints, and provides routing for the main UI (dashboard, test runner,
+ * results, audio recorder, and settings). Keeps an ApiService instance in sync with
+ * test configuration and exposes handlers for creating/updating test sessions and handling
+ * audio recordings.
+ *
+ * Behavior notes:
+ * - On mount: creates ApiService and AudioService, flattens endpoints from the packaged
+ *   JSON file, and reconstructs a paused TestSession if resume data is available.
+ * - Observes `config` and updates the ApiService via `updateConfig` when configuration changes.
+ * - Renders a loading screen while initialization is in progress.
+ * - Routes:
+ *   - "/" -> Dashboard
+ *   - "/test" -> TestRunner (redirects to "/" if no active session)
+ *   - "/results" -> Results
+ *   - "/audio" -> AudioRecorder
+ *   - "/settings" -> Settings
+ *
+ * @returns The app's root JSX element.
+ */
 function App() {
   // Global state
   const [isLoading, setIsLoading] = useState(true);
