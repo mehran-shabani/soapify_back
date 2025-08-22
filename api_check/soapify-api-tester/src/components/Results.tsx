@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { BarChart3, Download, FileText, Calendar, Clock, CheckCircle, XCircle, AlertTriangle, TrendingUp, Filter, Search } from 'lucide-react';
-import { TestSession, TestResult, TestStatistics } from '../types';
+import { TestSession } from '../types';
 import { 
   calculateStatistics, 
   exportResults, 

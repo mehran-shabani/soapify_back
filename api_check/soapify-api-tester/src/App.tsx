@@ -94,20 +94,29 @@ function App() {
         setAudioService(audioSvc);
 
         // Load API endpoints
-        if (apiEndpoints && apiEndpoints.api_endpoints) {
-          const formattedEndpoints: ApiEndpoint[] = [];
-          
-          apiEndpoints.api_endpoints.forEach(category => {
-            category.endpoints.forEach(endpoint => {
-              formattedEndpoints.push({
-                ...endpoint,
-                method: endpoint.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
-                category: category.category
-              });
+        try {
+          if (apiEndpoints && apiEndpoints.api_endpoints) {
+            const formattedEndpoints: ApiEndpoint[] = [];
+            
+            apiEndpoints.api_endpoints.forEach(category => {
+              if (category && category.endpoints && Array.isArray(category.endpoints)) {
+                category.endpoints.forEach(endpoint => {
+                  if (endpoint && endpoint.method && endpoint.name && endpoint.path) {
+                    formattedEndpoints.push({
+                      ...endpoint,
+                      method: endpoint.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+                      category: category.category || 'Unknown'
+                    });
+                  }
+                });
+              }
             });
-          });
-          
-          setEndpoints(formattedEndpoints);
+            
+            setEndpoints(formattedEndpoints);
+          }
+        } catch (error) {
+          console.error('Failed to load API endpoints:', error);
+          setEndpoints([]); // Set empty array as fallback
         }
 
         // Check for resume data
@@ -139,6 +148,7 @@ function App() {
     };
 
     initializeApp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update API service when config changes

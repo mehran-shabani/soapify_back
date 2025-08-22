@@ -54,13 +54,22 @@ export class AudioService {
         }
       });
 
-      // Determine MIME type based on format
+      // Determine MIME type based on format and browser support
       const mimeType = this.getMimeType(format);
       
-      // Create MediaRecorder
-      this.mediaRecorder = new MediaRecorder(this.stream, {
-        mimeType: mimeType
-      });
+      // Create MediaRecorder with fallback options
+      const options: MediaRecorderOptions = {};
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        options.mimeType = mimeType;
+      } else {
+        // Fallback to browser default or webm
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+          options.mimeType = 'audio/webm';
+        }
+        console.warn(`MIME type ${mimeType} not supported, using browser default`);
+      }
+      
+      this.mediaRecorder = new MediaRecorder(this.stream, options);
 
       // Create recording object
       this.currentRecording = {

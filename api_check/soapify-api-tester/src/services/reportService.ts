@@ -100,12 +100,21 @@ export class ReportService {
 
   private static generateSummary(session: TestSession, stats: TestStatistics): ReportSummary {
     const categoryStats = Object.entries(stats.categoriesStats);
-    const topPerforming = categoryStats.reduce((best, [category, data]) => 
-      data.averageTime < best[1].averageTime ? [category, data] : best
-    );
-    const worstPerforming = categoryStats.reduce((worst, [category, data]) => 
-      data.averageTime > worst[1].averageTime ? [category, data] : worst
-    );
+    
+    let topPerformingCategory = 'Unknown';
+    let worstPerformingCategory = 'Unknown';
+    
+    if (categoryStats.length > 0) {
+      const topPerforming = categoryStats.reduce((best, [category, data]) => 
+        data.averageTime < best[1].averageTime ? [category, data] : best
+      );
+      const worstPerforming = categoryStats.reduce((worst, [category, data]) => 
+        data.averageTime > worst[1].averageTime ? [category, data] : worst
+      );
+      
+      topPerformingCategory = topPerforming[0];
+      worstPerformingCategory = worstPerforming[0];
+    }
 
     const criticalIssues = session.results.filter(r => 
       r.status === 'error' || r.totalTime > this.VERY_SLOW_RESPONSE_THRESHOLD
@@ -127,8 +136,8 @@ export class ReportService {
       failedRequests: Math.round(stats.totalRequests * (stats.errorRate / 100)),
       averageResponseTime: stats.averageResponseTime,
       totalTestDuration: testDuration,
-      topPerformingCategory: topPerforming[0],
-      worstPerformingCategory: worstPerforming[0],
+      topPerformingCategory: topPerformingCategory,
+      worstPerformingCategory: worstPerformingCategory,
       criticalIssues,
       warningIssues
     };

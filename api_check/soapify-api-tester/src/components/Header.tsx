@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
-import { Play, Pause, Square, Mic, MicOff, Activity, Settings, Home, TestTube, BarChart3, Volume2 } from 'lucide-react';
+import { Play, Pause, Square, Mic, Activity, Settings, Home, TestTube, BarChart3, Volume2 } from 'lucide-react';
 import { TestSession, AudioRecording } from '../types';
 import AudioService from '../services/audioService';
 import { formatDuration } from '../utils/helpers';
