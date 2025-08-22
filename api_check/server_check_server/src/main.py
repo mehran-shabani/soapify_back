@@ -15,6 +15,8 @@ from .api_tests import VoiceUploadTest, STTTest, ChecklistTest, LoadTest
 from .monitoring import SystemMonitor, PerformanceTracker
 from .database import init_db, get_db_session
 from .models import TestRun, VoiceTestResult, PerformanceMetric, Alert
+from .diagnostic_system import DiagnosticSystem
+from .optimizer import APIOptimizer
 
 app = FastAPI(title="Soapify API Monitor", version="1.0.0")
 
@@ -30,6 +32,8 @@ app.add_middleware(
 # Initialize components
 system_monitor = SystemMonitor()
 performance_tracker = PerformanceTracker()
+diagnostic_system = DiagnosticSystem()
+api_optimizer = APIOptimizer()
 
 # Setup templates
 templates = Jinja2Templates(directory="templates")
@@ -425,6 +429,101 @@ async def store_test_result(result: Dict[str, Any]):
             await session.commit()
     except Exception as e:
         logger.error(f"Failed to store test result: {e}")
+
+@app.post("/api/diagnostics/analyze")
+async def analyze_error(request: dict):
+    """Analyze an error and provide diagnostic information"""
+    try:
+        error_message = request.get("error_message", "")
+        error_context = request.get("context", {})
+        
+        # Diagnose the error
+        diagnosis = diagnostic_system.diagnose_error(error_message, error_context)
+        
+        return diagnosis
+        
+    except Exception as e:
+        logger.error(f"Diagnostic error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.get("/api/diagnostics/test-sequence/{endpoint}")
+async def get_test_sequence(endpoint: str):
+    """Get a test sequence for debugging an API endpoint"""
+    try:
+        sequence = diagnostic_system.generate_test_sequence(endpoint)
+        return {"endpoint": endpoint, "sequence": sequence}
+    except Exception as e:
+        logger.error(f"Test sequence error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.get("/api/diagnostics/fix-script/{issue_type}")
+async def get_fix_script(issue_type: str, os: str = None):
+    """Get a fix script for a specific issue"""
+    try:
+        script = diagnostic_system.generate_fix_script(issue_type, os)
+        return {
+            "issue_type": issue_type,
+            "os": os or diagnostic_system.os_type,
+            "script": script
+        }
+    except Exception as e:
+        logger.error(f"Fix script error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.post("/api/optimizer/test-approaches")
+async def test_optimization_approaches():
+    """Test different API approaches and find the best configuration"""
+    try:
+        test_results_cache["optimization_in_progress"] = True
+        test_results_cache["optimization_progress"] = {"status": "Testing approaches..."}
+        
+        # Run optimization tests
+        optimization_results = await api_optimizer.optimize_all()
+        
+        test_results_cache["optimization_in_progress"] = False
+        test_results_cache["optimization_results"] = optimization_results
+        
+        return optimization_results
+        
+    except Exception as e:
+        logger.error(f"Optimization test error: {e}")
+        test_results_cache["optimization_in_progress"] = False
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.post("/api/optimizer/apply")
+async def apply_optimizations(request: dict):
+    """Apply the best configurations and create optimized project"""
+    try:
+        best_configs = request.get("best_configs", {})
+        
+        # Apply optimizations
+        result = await api_optimizer.apply_optimizations(best_configs)
+        
+        return {
+            "success": True,
+            "zip_path": result["zip_path"],
+            "report": result["report"],
+            "message": "Optimizations applied successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Apply optimization error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 if __name__ == "__main__":
     uvicorn.run(

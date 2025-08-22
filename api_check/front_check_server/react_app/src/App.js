@@ -8,7 +8,9 @@ import TestResults from './components/TestResults';
 import LoadTester from './components/LoadTester';
 import Dashboard from './components/Dashboard';
 import SynchronizedTester from './components/SynchronizedTester';
+import DiagnosticPanel from './components/DiagnosticPanel';
 import { testRunner } from './services/apiService';
+import { errorEmitter } from './components/VoiceRecorder';
 
 const AppContainer = styled.div`
   min-height: 100vh;
@@ -135,6 +137,8 @@ function App() {
     lastUpdated: null
   });
   const [serverConnected, setServerConnected] = useState(false);
+  const [lastError, setLastError] = useState(null);
+  const [currentEndpoint, setCurrentEndpoint] = useState('voice/upload');
 
   useEffect(() => {
     // Load saved results from localStorage
@@ -145,6 +149,19 @@ function App() {
     
     // Check server connection
     checkServerConnection();
+    
+    // Listen for errors from components
+    const handleError = (event) => {
+      setLastError(event.detail.error);
+      setCurrentEndpoint(event.detail.endpoint);
+      setActiveTab('diagnostics');
+    };
+    
+    errorEmitter.addEventListener('error', handleError);
+    
+    return () => {
+      errorEmitter.removeEventListener('error', handleError);
+    };
   }, []);
 
   useEffect(() => {
@@ -202,6 +219,8 @@ function App() {
       }
     } catch (error) {
       toast.error(`خطا در اجرای تست‌ها: ${error.message}`);
+      setLastError(error);
+      setActiveTab('diagnostics');
     } finally {
       setIsRunningTests(false);
     }
@@ -271,6 +290,9 @@ function App() {
           <Tab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>
             داشبورد
           </Tab>
+          <Tab active={activeTab === 'diagnostics'} onClick={() => setActiveTab('diagnostics')}>
+            تشخیص خطا
+          </Tab>
         </TabContainer>
 
         {activeTab === 'tests' && (
@@ -291,6 +313,13 @@ function App() {
 
         {activeTab === 'dashboard' && (
           <Dashboard data={dashboardData} results={testResults} />
+        )}
+
+        {activeTab === 'diagnostics' && (
+          <DiagnosticPanel 
+            lastError={lastError} 
+            currentEndpoint={currentEndpoint}
+          />
         )}
       </MainContent>
 

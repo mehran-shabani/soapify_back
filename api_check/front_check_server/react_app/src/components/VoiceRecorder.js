@@ -4,6 +4,10 @@ import { ReactMic } from 'react-mic';
 import { toast } from 'react-toastify';
 import { voiceService, sttService } from '../services/apiService';
 
+// Create event emitter for error handling
+class ErrorEmitter extends EventTarget {}
+export const errorEmitter = new ErrorEmitter();
+
 const Container = styled.div`
   background: white;
   border-radius: 8px;
@@ -172,6 +176,15 @@ function VoiceRecorder() {
         error: error.message,
         responseTime: Date.now() - startTime
       });
+      
+      // Emit error for diagnostic panel
+      errorEmitter.dispatchEvent(new CustomEvent('error', {
+        detail: {
+          error,
+          endpoint: 'voice/upload',
+          timestamp: new Date().toISOString()
+        }
+      }));
     } finally {
       setIsUploading(false);
     }
