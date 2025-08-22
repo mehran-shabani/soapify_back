@@ -87,6 +87,19 @@ const TranscriptionBox = styled.div`
   text-align: right;
 `;
 
+/**
+ * VoiceRecorder component: provides UI and logic to record audio, play it back, upload it, and request transcription.
+ *
+ * Renders recording controls (start/stop), playback, and upload buttons; displays audio file statistics, upload results,
+ * and transcription results. Uses React state to track recording, upload, and transcription status.
+ *
+ * Side effects:
+ * - Shows user-facing toast notifications for recording/upload/transcription progress and errors.
+ * - Calls voiceService.uploadAudio to upload recorded audio and sttService.transcribe to transcribe uploaded audio.
+ * - Emits diagnostic error events via the exported errorEmitter on upload failures.
+ *
+ * @returns {JSX.Element} The recorder UI.
+ */
 function VoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);

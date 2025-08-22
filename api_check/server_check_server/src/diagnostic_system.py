@@ -29,12 +29,30 @@ class DiagnosticSystem:
     """Comprehensive diagnostic system for API issues"""
     
     def __init__(self):
+        """
+        Initialize the DiagnosticSystem.
+        
+        Determines the host OS type and loads the issue detection patterns and OS-/context-specific command templates into instance attributes:
+        - self.os_type: lowercase platform name (e.g., "windows", "darwin", "linux")
+        - self.issue_patterns: mapping of issue keys to regex patterns, categories, and severity levels
+        - self.command_templates: dictionary of diagnostic and quick-fix command templates keyed by diagnostic area and OS
+        """
         self.os_type = platform.system().lower()
         self.issue_patterns = self._load_issue_patterns()
         self.command_templates = self._load_command_templates()
     
     def _load_issue_patterns(self) -> Dict[str, Any]:
-        """Load patterns for identifying different types of issues"""
+        """
+        Return a mapping of known issue keys to their detection metadata.
+        
+        Each mapping entry is a dict with:
+        - "patterns": list of regular-expression strings used to detect the issue (these are matched case-insensitively by diagnose_error).
+        - "category": an IssueCategory enum value classifying the issue domain.
+        - "level": an IssueLevel enum value indicating severity/required actor to fix (GREEN, YELLOW, RED).
+        
+        Returns:
+            Dict[str, Any]: Dictionary keyed by issue identifier (e.g., "cors", "network_timeout") with the detection metadata described above.
+        """
         return {
             "cors": {
                 "patterns": [
@@ -118,7 +136,27 @@ class DiagnosticSystem:
         }
     
     def _load_command_templates(self) -> Dict[str, Any]:
-        """Load command templates for different OS and issues"""
+        """
+        Load and return command templates used for generating diagnostic commands.
+        
+        Returns a dictionary mapping diagnostic template keys (e.g., "network_diagnostics",
+        "cors_diagnostics", "auth_diagnostics", "server_diagnostics", "database_diagnostics",
+        "ssl_diagnostics", "quick_fixes") to OS- and context-specific command groups.
+        
+        Each template value is a mapping where keys are OS identifiers ("windows", "darwin",
+        "linux") or "all" and the value contains one or both of:
+        - "desktop": list of command templates intended to run from a client/machine
+        - "server": list of command templates intended to run on the server
+        
+        Each command entry is a dictionary with:
+        - "cmd" (str): a command string that may include placeholders: {host}, {port},
+          {container}, {db_container}, {endpoint}
+        - "desc" (str): a short human-readable description (Persian in these templates)
+        - optional "powershell" (bool): True when the command targets PowerShell on Windows
+        
+        The returned templates are used by other methods to format concrete commands by
+        substituting the placeholders with values from the diagnosis context.
+        """
         return {
             "network_diagnostics": {
                 "windows": {
@@ -363,7 +401,29 @@ class DiagnosticSystem:
         }
     
     def diagnose_error(self, error_message: str, error_context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Diagnose the error and provide solutions"""
+        """
+        Diagnose an error message by matching known issue patterns and produce suggested solutions.
+        
+        Scans the provided error_message against the loaded issue patterns (case-insensitive). For each matching pattern it records a detected issue with fields:
+        - type: the issue key
+        - category: IssueCategory value (string)
+        - level: IssueLevel value (string)
+        - confidence: 0.9 if the exact pattern string appears in the error_message, otherwise 0.7
+        
+        If any issues are detected, sets `primary_issue` to the detected issue with the highest confidence and populates `solutions` by calling _generate_solutions(primary_issue, error_context). The returned diagnosis also includes the original error_message, a timestamp (UTC ISO format), and the full list of detected_issues.
+        
+        Parameters:
+            error_message (str): Raw error text to analyze.
+            error_context (Dict[str, Any], optional): Contextual values (host, port, container, etc.) used when generating solution commands.
+        
+        Returns:
+            Dict[str, Any]: Diagnosis dictionary with keys:
+                - error_message (str)
+                - detected_issues (List[Dict[str, Any]])
+                - primary_issue (Dict[str, Any] or None)
+                - solutions (List[Dict[str, Any]])
+                - timestamp (str, UTC ISO format)
+        """
         diagnosis = {
             "error_message": error_message,
             "detected_issues": [],
@@ -401,7 +461,29 @@ class DiagnosticSystem:
         return diagnosis
     
     def _generate_solutions(self, issue: Dict[str, Any], context: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """Generate solutions based on the issue type"""
+        """
+        Generate actionable solutions for a detected issue.
+        
+        Given a detected issue record, selects appropriate command templates, augments them with quick fixes when appropriate, and assembles a solution descriptor describing available commands, a human-readable explanation, and who can apply the fix.
+        
+        Parameters:
+            issue (dict): A detected-issue dictionary produced by diagnose_error with at least the keys:
+                - "type" (str): issue identifier (e.g., "cors", "network_timeout").
+                - "level" (str): severity value matching IssueLevel values ("green", "yellow", "red").
+              The function reads these keys to choose templates and to set flags in the result.
+            context (dict, optional): Formatting/context values used when rendering command templates
+              (e.g., host, port, container, db_container, endpoint). If omitted, defaults are used.
+        
+        Returns:
+            list[dict]: A list containing one solution dictionary with keys:
+                - "issue_type" (str): the issue identifier.
+                - "level" (str): severity level.
+                - "commands" (dict): grouped OS/role commands, typically with "desktop" and "server" lists.
+                - "explanation" (str): human-readable explanation of the issue.
+                - "can_user_fix" (bool): True when the issue is user-fixable (GREEN).
+                - "needs_cooperation" (bool): True when cooperation is required (YELLOW).
+                - "admin_only" (bool): True when administrative access is required (RED).
+        """
         solutions = []
         issue_type = issue["type"]
         
@@ -446,7 +528,25 @@ class DiagnosticSystem:
         return solutions
     
     def _get_commands_for_issue(self, template_key: str, context: Dict[str, Any] = None) -> Dict[str, List[Dict[str, str]]]:
-        """Get OS-specific commands for an issue"""
+        """
+        Builds and returns OS-specific diagnostic commands for a given issue template, with contextual placeholder substitution.
+        
+        Given a template key that maps into the loaded command templates, this method selects the commands appropriate for the current OS (falls back to an "all" template if present), formats each command by substituting context values (host, port, container, db_container, endpoint), and groups them into "desktop" and "server" lists.
+        
+        Parameters:
+            template_key (str): Key identifying which command template group to use (e.g., "network_diagnostics", "cors_diagnostics", "quick_fixes").
+            context (Dict[str, Any], optional): Values used to format command templates. Supported keys and defaults:
+                - host: default "django-m.chbk.app"
+                - port: default "8000"
+                - container: default "soapify_web"
+                - db_container: default "soapify_mysql"
+                - endpoint: default "voice/upload"
+        
+        Returns:
+            Dict[str, List[Dict[str, str]]]: A dictionary with two keys: "desktop" and "server". Each value is a list of command dictionaries.
+            - For "desktop" entries: {"command": formatted command string, "description": description string, "is_powershell": bool}
+            - For "server" entries: {"command": formatted command string, "description": description string}
+        """
         if context is None:
             context = {}
         
@@ -497,7 +597,18 @@ class DiagnosticSystem:
         return commands
     
     def _get_issue_explanation(self, issue_type: str) -> str:
-        """Get explanation for issue type"""
+        """
+        Return a human-readable Persian explanation for a given issue type.
+        
+        Looks up predefined explanations for known issue keys (e.g. "cors", "network_timeout", "ssl_certificate", "auth_failed").
+        If the supplied issue_type is not recognized, returns a generic Persian message indicating an unknown error that requires further investigation.
+        
+        Parameters:
+            issue_type (str): The issue key to explain (for example "cors", "auth_failed").
+        
+        Returns:
+            str: A Persian explanation suitable for end-user display.
+        """
         explanations = {
             "cors": "مرورگر به دلایل امنیتی از ارسال درخواست به دامنه‌های مختلف جلوگیری می‌کند. سرور باید تنظیمات CORS را اصلاح کند.",
             "network_timeout": "اتصال به سرور برقرار نمی‌شود. ممکن است مشکل از اینترنت شما، فایروال یا سرور باشد.",
@@ -512,7 +623,24 @@ class DiagnosticSystem:
         return explanations.get(issue_type, "خطای ناشناخته. نیاز به بررسی بیشتر.")
     
     def generate_test_sequence(self, api_endpoint: str, issue_type: str = None) -> List[Dict[str, Any]]:
-        """Generate a complete test sequence for an API endpoint"""
+        """
+        Generate a sequenced set of diagnostic test steps for an API endpoint.
+        
+        Returns a list of step dictionaries that cover common desktop- and server-level checks (connectivity, HTTPS availability, a GET request to the specified API endpoint, conditional CORS preflight for known POST-like endpoints, container status, and recent error logs). Each step dictionary contains:
+        - "step" (int): step number in sequence.
+        - "level" (str): "desktop" or "server" indicating where the step should be executed.
+        - "command" (str): a shell command template to run (ping uses an OS-dependent form).
+        - "description" (str): brief human-readable description (Persian).
+        - "expected" (str): expected outcome or indicator of success.
+        - "on_failure" (str): suggested next action if the step fails.
+        
+        Parameters:
+        - api_endpoint (str): API endpoint path fragment used to build endpoint-specific commands (e.g., "voice/upload").
+        - issue_type (str | None): optional context hint for tailoring the sequence (currently unused; reserved for future use).
+        
+        Returns:
+        - List[Dict[str, Any]]: ordered diagnostic steps ready for execution or display.
+        """
         sequence = []
         
         # Basic connectivity test
@@ -578,7 +706,18 @@ class DiagnosticSystem:
         return sequence
     
     def generate_fix_script(self, issue_type: str, os_type: str = None) -> str:
-        """Generate a complete fix script for common issues"""
+        """
+        Generate an OS-specific fix script for a given issue type.
+        
+        Returns a shell or PowerShell script tailored to common fixes for the named issue. If os_type is omitted, the system-detected OS is used. Supported issue types include "cors" and "network"; returned scripts may be provided per-OS (e.g., "windows", "darwin") or as an "all" generic script.
+        
+        Parameters:
+            issue_type (str): Identifier of the issue to produce a script for (e.g., "cors", "network").
+            os_type (str | None): Operating system key for the script ("windows", "darwin", "linux", etc.). If None, uses the instance's detected OS.
+        
+        Returns:
+            str: The text of the fix script for the requested issue and OS. If no specific script exists, returns a fallback message "# No specific script available".
+        """
         if os_type is None:
             os_type = self.os_type
         
@@ -689,7 +828,23 @@ nc -zv django-m.chbk.app 443
         return scripts.get(issue_type, {}).get(os_type, scripts.get(issue_type, {}).get("all", "# No specific script available"))
     
     def export_diagnostic_report(self, diagnosis: Dict[str, Any], format: str = "json") -> str:
-        """Export diagnostic report in various formats"""
+        """
+        Export a diagnostic report rendered in the requested format.
+        
+        Supported formats:
+        - "json" (default): returns a pretty-printed JSON string (ensure_ascii=False).
+        - "markdown": returns a markdown report including generated timestamp, the error message block, a list of detected issues (with level emoji, category, confidence, and level), and a Solutions section with desktop and server command code blocks when present.
+        - "html": returns a simple HTML document containing the generated timestamp and the error message (issues/solutions are left as a placeholder in the current output).
+        
+        Parameters:
+            diagnosis (Dict[str, Any]): Diagnosis dictionary produced by diagnose_error. Expected keys used by this function include
+                'timestamp', 'error_message', 'detected_issues' (iterable of dicts with at least 'type', 'category', 'confidence', 'level'),
+                and 'solutions' (iterable of solution dicts containing 'issue_type', 'explanation', and 'commands' with 'desktop'/'server' lists).
+            format (str): Output format; one of "json", "markdown", or "html". Defaults to "json".
+        
+        Returns:
+            str: The diagnostic report rendered as a string in the requested format. If an unrecognized format is provided, returns str(diagnosis).
+        """
         if format == "json":
             return json.dumps(diagnosis, indent=2, ensure_ascii=False)
         

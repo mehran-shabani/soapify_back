@@ -10,7 +10,19 @@ class SystemMonitor:
     """Monitor system resources and performance"""
     
     async def collect_metrics(self) -> Dict[str, Any]:
-        """Collect current system metrics"""
+        """
+        Collect current system and process metrics.
+        
+        Returns a dictionary with a UTC ISO timestamp and the following top-level sections:
+        - system: platform, platform_version, architecture, python_version
+        - cpu: usage_percent, count, frequency_mhz (None if unavailable)
+        - memory: usage_percent, used_gb, total_gb
+        - disk: usage_percent, used_gb, total_gb
+        - network: bytes_sent_mb, bytes_received_mb
+        - process: memory_mb, cpu_percent
+        
+        On failure returns an empty dict.
+        """
         try:
             # CPU metrics
             cpu_percent = psutil.cpu_percent(interval=1)
@@ -79,7 +91,16 @@ class SystemMonitor:
             return {}
     
     async def check_network_latency(self, target_host: str) -> float:
-        """Check network latency to target host"""
+        """
+        Measure network latency to a target host by invoking the system `ping` command.
+        
+        This asynchronous method runs a single ICMP ping to the given target host (platform-specific ping flags) and attempts to parse the round-trip time in milliseconds from the command output. On success it returns the latency in milliseconds as a float; on failure (non-zero exit, unparsable output, or any error) it returns -1. The function handles exceptions internally and does not raise.
+        Parameters:
+            target_host (str): Hostname or IP address to ping.
+        
+        Returns:
+            float: Round-trip latency in milliseconds, or -1 if the latency could not be determined.
+        """
         try:
             import subprocess
             
@@ -110,11 +131,24 @@ class PerformanceTracker:
     """Track API performance metrics"""
     
     def __init__(self):
+        """
+        Initialize a PerformanceTracker.
+        
+        Creates an internal list to store performance metric dictionaries and sets the maximum number of retained metrics (1000).
+        """
         self.metrics: List[Dict[str, Any]] = []
         self.max_metrics = 1000  # Keep last 1000 metrics
     
     def add_metric(self, metric: Dict[str, Any]):
-        """Add a performance metric"""
+        """
+        Add a performance metric to the internal store, trimming older entries when capacity is exceeded.
+        
+        Parameters:
+            metric (Dict[str, Any]): Metric dictionary to record. Expected to include a timestamp (UNIX seconds or ISO string) and, for statistics, a numeric `response_time_ms`. An optional boolean `success` flag may be provided to indicate request/result success.
+        
+        Returns:
+            None
+        """
         self.metrics.append(metric)
         
         # Keep only recent metrics
@@ -122,7 +156,24 @@ class PerformanceTracker:
             self.metrics = self.metrics[-self.max_metrics:]
     
     def get_statistics(self) -> Dict[str, Any]:
-        """Calculate performance statistics"""
+        """
+        Compute aggregated performance statistics from stored metrics.
+        
+        Returns a dictionary with:
+        - total_requests (int): count of stored metrics.
+        - successful_requests (int): metrics where `success` is truthy.
+        - failed_requests (int): total minus successful_requests.
+        - success_rate_percent (float): percentage of successful requests (0-100).
+        - response_times (dict): aggregated timing values in milliseconds:
+            - avg_ms (float): mean response time.
+            - min_ms (float): minimum response time.
+            - max_ms (float): maximum response time.
+            - p50_ms (float): 50th percentile (median).
+            - p95_ms (float): 95th percentile.
+            - p99_ms (float): 99th percentile.
+        
+        Only metrics containing a `response_time_ms` numeric field are used for timing calculations. If there are no metrics or no response times available, the function returns an empty dict.
+        """
         if not self.metrics:
             return {}
         
@@ -157,7 +208,17 @@ class PerformanceTracker:
         return stats
     
     def get_recent_metrics(self, minutes: int = 5) -> List[Dict[str, Any]]:
-        """Get metrics from the last N minutes"""
+        """
+        Return metrics collected within the last `minutes` minutes.
+        
+        Filters the internal metrics store and returns entries whose `timestamp` (ISO 8601 string) is strictly more recent than the cutoff time calculated in UTC. Metrics with missing or unparsable `timestamp` values are ignored.
+        
+        Parameters:
+            minutes (int): Lookback window in minutes (default 5).
+        
+        Returns:
+            List[Dict[str, Any]]: List of metric dictionaries recorded within the lookback window.
+        """
         cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
         
         recent_metrics = [
@@ -171,6 +232,12 @@ class HealthChecker:
     """Check health of various API endpoints"""
     
     def __init__(self, base_url: str):
+        """
+        Initialize a HealthChecker with a base URL and predefined endpoints to monitor.
+        
+        Parameters:
+            base_url (str): Base URL used to construct full endpoint URLs for health checks (e.g., "https://example.com").
+        """
         self.base_url = base_url
         self.endpoints = [
             {'path': '/health', 'method': 'GET', 'name': 'Health Check'},
@@ -180,7 +247,14 @@ class HealthChecker:
         ]
     
     async def check_all_endpoints(self) -> List[Dict[str, Any]]:
-        """Check health of all endpoints"""
+        """
+        Check the health of all configured endpoints.
+        
+        This asynchronously iterates over the monitor's configured endpoints and invokes check_endpoint for each one, collecting the individual health results.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of result dictionaries for each endpoint. Each entry contains fields such as `name`, `path`, `method`, `status` (e.g., "healthy", "unhealthy", or "error"), `status_code` (when available), `response_time_ms`, `checked_at`, and optionally an `error` message when a check fails.
+        """
         results = []
         
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -191,7 +265,29 @@ class HealthChecker:
         return results
     
     async def check_endpoint(self, client: httpx.AsyncClient, endpoint: Dict[str, str]) -> Dict[str, Any]:
-        """Check a single endpoint"""
+        """
+        Check a single configured HTTP endpoint and return its health result.
+        
+        Sends a request to the endpoint built from self.base_url + endpoint['path'], measures round-trip time, and classifies the result as 'healthy' when response.status_code < 400, 'unhealthy' when status_code >= 400, or 'error' when an exception occurs.
+        
+        Parameters:
+            endpoint (dict): Mapping that must include:
+                - 'path' (str): URL path appended to the HealthChecker base_url.
+                - 'method' (str): HTTP method to use (e.g., 'GET', 'POST').
+                - 'name' (str): Human-readable name for the endpoint.
+            (client is an httpx.AsyncClient used to perform the request and is intentionally undocumented as a common client service.)
+        
+        Returns:
+            dict: Health check result containing:
+                - 'endpoint' (str): the endpoint path checked.
+                - 'name' (str): the endpoint name.
+                - 'method' (str): HTTP method used.
+                - 'status' (str): 'healthy', 'unhealthy', or 'error'.
+                - 'status_code' (int) [present on success/error responses]: HTTP status code.
+                - 'error' (str) [present when an exception occurred]: error message.
+                - 'response_time_ms' (float): elapsed time in milliseconds, rounded to 2 decimals.
+                - 'checked_at' (str): ISO-8601 UTC timestamp when the check completed.
+        """
         url = f"{self.base_url}{endpoint['path']}"
         start_time = asyncio.get_event_loop().time()
         

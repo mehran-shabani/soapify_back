@@ -13,6 +13,21 @@ class APIOptimizer:
     """Test APIs with multiple approaches and select the best configuration"""
     
     def __init__(self):
+        """
+        Initialize APIOptimizer with predefined test approaches and empty result stores.
+        
+        Creates:
+        - self.test_approaches (Dict[str, List[Dict[str, Any]]]): predefined approach templates for three categories:
+          - 'voice_upload': approaches configuring chunking, compression, streaming, parallelism and timeouts.
+          - 'stt': speech-to-text approaches configuring preprocessing, chunking/overlap, parallel workers and model selection.
+          - 'database': database connection and throughput approaches (pool sizes, overflow, timeouts, caching, async writes, replicas).
+          Each approach entry is a dict with keys:
+            - 'name' (str): short identifier for the approach.
+            - 'config' (dict): approach-specific parameters and their default values.
+        
+        - self.optimization_results (Dict[str, List[Dict[str, Any]]]): populated later with per-approach test outcomes and metrics.
+        - self.best_configurations (Dict[str, Dict[str, Any]]): populated later with the selected best approach/config per category.
+        """
         self.test_approaches = {
             'voice_upload': [
                 {
@@ -132,7 +147,24 @@ class APIOptimizer:
         self.best_configurations = {}
     
     async def test_approach(self, category: str, approach: Dict[str, Any]) -> Dict[str, Any]:
-        """Test a single approach and measure performance"""
+        """
+        Run the configured test for a single category approach and collect its performance metrics.
+        
+        Dispatches to the category-specific async tester (_test_voice_upload, _test_stt, or _test_database), measures elapsed time, and returns a result dict describing the approach, collected metrics, timing, and success state. Exceptions raised by the category tester are caught and recorded in the returned result (the exception is not re-raised).
+        
+        Parameters:
+            category (str): One of 'voice_upload', 'stt', or 'database' selecting which test to run.
+            approach (Dict[str, Any]): Approach descriptor with keys 'name' (str) and 'config' (Dict) used by the tester.
+        
+        Returns:
+            Dict[str, Any]: Result object with keys:
+                - 'approach_name' (str): approach['name']
+                - 'config' (Dict): approach['config']
+                - 'metrics' (Dict): metrics returned by the category tester (empty on error)
+                - 'total_time' (float): elapsed seconds for the test
+                - 'success' (bool): True if test completed without exception, otherwise False
+                - 'error' (str, optional): stringified exception message when success is False
+        """
         logger.info(f"Testing {category} with approach: {approach['name']}")
         
         start_time = time.time()
@@ -162,7 +194,27 @@ class APIOptimizer:
         return results
     
     async def _test_voice_upload(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Test voice upload with specific configuration"""
+        """
+        Simulate testing voice-file uploads for a given upload configuration and return aggregated performance metrics.
+        
+        This function runs a simulated upload of representative test files and derives aggregated metrics influenced by the provided configuration. It is a synthetic tester (no real network or API calls) that models effects of compression, streaming, chunking, and parallelism on upload time, CPU/memory usage, and success characteristics.
+        
+        Config keys (optional, affect simulated results):
+            compression (bool): Whether compression is enabled.
+            compression_level (int): Compression intensity (higher -> greater compression, higher CPU).
+            streaming (bool): Whether uploads are streamed (reduces effective upload time).
+            parallel_chunks (int): Number of parallel chunk uploads (reduces upload time up to a small cap).
+            chunk_size (int): Size of upload chunks in bytes (affects memory usage).
+        
+        Returns:
+            Dict[str, Any]: Aggregated metrics with keys:
+                - upload_speed_mbps (float): Simulated effective upload throughput in Mbps.
+                - compression_ratio (float): Average compression ratio applied.
+                - cpu_usage (float): Estimated CPU usage percentage.
+                - memory_usage (float): Estimated memory usage in MB.
+                - success_rate (float): Percentage of successful uploads (simulated).
+                - avg_response_time (float): Average per-file response time in milliseconds.
+        """
         # Simulate testing with different configurations
         # In real implementation, this would actually test the API
         
@@ -214,7 +266,28 @@ class APIOptimizer:
         return metrics
     
     async def _test_stt(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Test STT with specific configuration"""
+        """
+        Simulate a speech-to-text (STT) test for a given configuration and return measured metrics.
+        
+        Simulates how configuration options affect accuracy, processing time, CPU and memory usage,
+        and word error rate. This is a deterministic synthetic benchmark (no network I/O).
+        
+        Parameters:
+            config (Dict[str, Any]): Configuration options that alter simulated behavior. Recognized keys:
+                - preprocessing (bool): If true, increases accuracy and adds processing overhead.
+                - noise_reduction (bool): Applied only when `preprocessing` is true; further improves accuracy.
+                - parallel_processing (bool): If true, processing time is divided across workers.
+                - workers (int): Number of parallel workers used when `parallel_processing` is true (capped in simulation).
+                - model (str): 'enhanced' to simulate a higher-accuracy, higher-memory model; any other value uses the baseline model.
+        
+        Returns:
+            Dict[str, Any]: Metrics produced by the simulation with keys:
+                - accuracy (float): Simulated percent accuracy (capped at 98).
+                - processing_time (float): Simulated processing time in milliseconds.
+                - cpu_usage (float): Simulated CPU usage percentage estimate.
+                - memory_usage (int): Simulated memory usage in megabytes.
+                - word_error_rate (float): 100 - accuracy, expressed as a percentage.
+        """
         metrics = {
             'accuracy': 0,
             'processing_time': 0,
@@ -255,7 +328,25 @@ class APIOptimizer:
         return metrics
     
     async def _test_database(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Test database performance with specific configuration"""
+        """
+        Estimate database performance metrics for a given configuration.
+        
+        Simulates how configuration fields affect query latency, concurrency, and throughput and returns a dictionary of derived metrics.
+        
+        Parameters:
+            config (Dict[str, Any]): Configuration values used to compute metrics. Expected keys:
+                - pool_size (int): Connection pool size; larger pools reduce per-query time up to a cap.
+                - query_cache_size (optional, Any): Presence/truthiness reduces query time.
+                - async_writes (optional, Any): Presence/truthiness reduces query time by enabling asynchronous writes.
+        
+        Returns:
+            Dict[str, Any]: Calculated performance metrics with the following keys:
+                - query_time_ms (float): Estimated average query time in milliseconds.
+                - connections_used (int): Number of connections effectively used (bounded).
+                - throughput_qps (float): Estimated throughput in queries per second.
+                - latency_p95 (float): Estimated 95th-percentile latency in milliseconds.
+                - latency_p99 (float): Estimated 99th-percentile latency in milliseconds.
+        """
         metrics = {
             'query_time_ms': 0,
             'connections_used': 0,
@@ -285,7 +376,18 @@ class APIOptimizer:
         return metrics
     
     async def optimize_all(self) -> Dict[str, Any]:
-        """Test all approaches and find the best configuration for each category"""
+        """
+        Run tests for all configured approaches, choose the best approach per category, and return a summary.
+        
+        For each category in self.test_approaches this asynchronously runs self.test_approach for every approach, collects per-approach results, selects the best approach using self._select_best_approach, and updates self.best_configurations and self.optimization_results.
+        
+        Returns:
+            Dict[str, Any]: {
+                'best_configurations': mapping of category -> selected approach result dict,
+                'all_results': mapping of category -> list of per-approach result dicts,
+                'optimization_completed': ISO-8601 UTC timestamp string when optimization finished
+            }
+        """
         logger.info("Starting optimization process...")
         
         for category, approaches in self.test_approaches.items():
@@ -311,7 +413,17 @@ class APIOptimizer:
         }
     
     def _select_best_approach(self, category: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Select the best approach based on metrics"""
+        """
+        Selects the best approach result for a category by scoring successful runs and returning the highest-scored entry.
+        
+        Filters out failed results (those where 'success' is falsy). If no runs succeeded, returns the first result from the provided list. For each successful result this method computes and injects an 'optimization_score' into the result using category-specific criteria:
+        - voice_upload: favors higher `upload_speed_mbps` and `success_rate`, penalizes `avg_response_time` and `cpu_usage`.
+        - stt: favors higher `accuracy`, penalizes `processing_time` and `word_error_rate`.
+        - database: favors higher `throughput_qps`, penalizes `query_time_ms` and `latency_p99`.
+        
+        Returns:
+            The result dictionary (one of the items from `results`) selected as best. The returned dict for successful candidates will include an `optimization_score` key.
+        """
         # Filter out failed tests
         successful_results = [r for r in results if r.get('success', False)]
         
@@ -348,7 +460,21 @@ class APIOptimizer:
         return max(successful_results, key=lambda x: x.get('optimization_score', 0))
     
     async def apply_optimizations(self, project_path: str) -> str:
-        """Apply the best configurations to the project and create optimized version"""
+        """
+        Create an optimized copy of a project using the previously selected best configurations, write an optimization report, package the optimized project into a ZIP archive, and return the path to that archive.
+        
+        This async method performs these steps:
+        - Makes a timestamped copy of the provided project directory.
+        - Applies configuration changes based on self.best_configurations.
+        - Writes an OPTIMIZATION_REPORT.json containing the timestamp, applied optimizations, calculated performance improvements, and the full test results.
+        - Creates a ZIP archive of the optimized project and removes the temporary optimized directory.
+        
+        Parameters:
+            project_path (str): Path to the original project directory to optimize.
+        
+        Returns:
+            str: Filesystem path to the created ZIP archive of the optimized project.
+        """
         logger.info("Applying optimizations to project...")
         
         # Create a copy of the project
@@ -379,7 +505,26 @@ class APIOptimizer:
         return zip_path
     
     async def _apply_config_changes(self, project_path: str):
-        """Apply configuration changes to the project files"""
+        """
+        Write optimized configuration files into a copied project directory based on the optimizer's selected best configurations.
+        
+        This updates two files under the given project path:
+        - optimized_config.json: a JSON object containing the chosen 'voice_upload', 'stt', and 'database' configurations.
+        - soapify/settings_optimized.py: a Django settings fragment that applies selected database pool sizes, cache connection limits, and upload size limits.
+        
+        Parameters:
+            project_path (str): Path to the root of the project copy where optimized files will be written. Existing files at the target locations will be overwritten.
+        
+        Behavior and side effects:
+        - Reads settings from self.best_configurations for the keys 'voice_upload', 'stt', and 'database' (defaults to empty dicts when missing).
+        - Creates or replaces:
+          - <project_path>/optimized_config.json
+          - <project_path>/soapify/settings_optimized.py
+        - Values written include database pool_size and max_overflow, cache max_connections (derived from pool_size), and FILE_UPLOAD_MAX_MEMORY_SIZE (derived from voice_upload.chunk_size).
+        
+        Exceptions:
+        - I/O errors (e.g., missing directories, permission errors) will propagate to the caller.
+        """
         # This would modify actual configuration files based on best configurations
         # For demonstration, we'll create a new config file
         
@@ -428,7 +573,18 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = FILE_UPLOAD_MAX_MEMORY_SIZE
 """)
     
     def _calculate_improvements(self) -> Dict[str, Any]:
-        """Calculate performance improvements from optimization"""
+        """
+        Compute relative performance improvements between the default (first) approach and the selected best approach for each category.
+        
+        Returns a dictionary mapping category names to improvement metrics. For categories with both a successful default and a successful best result, the dictionary may contain:
+        - 'voice_upload': {'upload_speed_improvement': '<percent>'} (percentage change in upload Mbps, formatted like '12.3%')
+        - 'stt': {'accuracy_improvement': '<signed percent>'} (absolute percentage-point change, formatted like '+1.2%')
+        - 'database': {'throughput_improvement': '<percent>'} (percentage change in queries-per-second, formatted like '8.7%' )
+        
+        Categories without comparable successful results are omitted.
+        Returns:
+            Dict[str, Any]: Improvements per category with human-readable percentage strings.
+        """
         improvements = {}
         
         for category, results in self.optimization_results.items():
@@ -465,7 +621,22 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = FILE_UPLOAD_MAX_MEMORY_SIZE
         return improvements
     
     async def _create_zip(self, source_path: str, zip_path: str):
-        """Create a zip file of the optimized project"""
+        """
+        Create a ZIP archive of a directory and remove the source directory afterwards.
+        
+        This asynchronously-invoked helper walks `source_path` and writes files into `zip_path`
+        using ZIP_DEFLATED compression. It excludes directories named `.git`, `__pycache__`,
+        and `node_modules`, and skips files ending with `.pyc` or `.pyo`. After the archive is
+        written, the original `source_path` directory tree is removed.
+        
+        Parameters:
+            source_path (str): Path to the directory to be archived.
+            zip_path (str): Filesystem path for the resulting ZIP file.
+        
+        Notes:
+            - Any I/O errors from reading files, creating the archive, or removing the
+              directory will propagate to the caller.
+        """
         logger.info(f"Creating zip file: {zip_path}")
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:

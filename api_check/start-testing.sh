@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Function to check if service is running
+# check_service reports whether the previously run command succeeded for the given service name and exits with status 1 on failure.
 check_service() {
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ $1 started successfully${NC}"

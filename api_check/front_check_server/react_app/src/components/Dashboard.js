@@ -115,6 +115,20 @@ const InfoValue = styled.span`
   font-weight: 600;
 `;
 
+/**
+ * Dashboard React component rendering statistics, charts, and details for provided test data.
+ *
+ * Renders top-line metrics, a success/failure pie chart, a per-API average response time bar chart,
+ * and a details panel (last updated, per-API totals and success rates). Internally computes
+ * aggregated API stats (total, success, failed, avgTime) from the `results` array; if `results`
+ * is falsy or empty, aggregates default to zero. Dates are formatted for the "fa-IR" locale with
+ * a fallback to the original string and 'نامشخص' when missing.
+ *
+ * @param {Object} props
+ * @param {{ totalTests: number, successRate: number, avgResponseTime: number, lastUpdated?: string }} props.data - Top-level metrics displayed in the stat cards and the lastUpdated value for the details panel.
+ * @param {Array<Object>} props.results - Array of per-test result objects. Each item may include `voice`, `stt`, and `checklist` objects with `success` (boolean) and `responseTime` (number) fields; these are used to compute counts and average response times.
+ * @returns {JSX.Element} The rendered dashboard component.
+ */
 function Dashboard({ data, results }) {
   // Calculate API-specific stats
   const getApiStats = () => {

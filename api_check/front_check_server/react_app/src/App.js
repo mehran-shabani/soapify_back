@@ -126,6 +126,23 @@ const PulseIndicator = styled.div`
   }
 `;
 
+/**
+ * Root React component for the API testing UI.
+ *
+ * Renders the full application layout (header, control panel, tabs, and content panels)
+ * and coordinates test execution, result persistence, basic server monitoring, and diagnostics.
+ *
+ * Behavior and side effects:
+ * - Loads and persists test results to localStorage at key "testResults".
+ * - Periodically checks a server monitor endpoint on mount to set a connectivity indicator.
+ * - Subscribes to an external errorEmitter to receive component error events and switches to
+ *   the diagnostics tab when an error is emitted.
+ * - Orchestrates running all tests via testRunner, appends results, and shows toast notifications
+ *   for progress, success, warnings, and errors.
+ * - Provides handlers to clear results and export results as a timestamped JSON download.
+ *
+ * @returns {JSX.Element} The application UI.
+ */
 function App() {
   const [activeTab, setActiveTab] = useState('tests');
   const [isRunningTests, setIsRunningTests] = useState(false);

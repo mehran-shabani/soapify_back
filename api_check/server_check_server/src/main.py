@@ -50,7 +50,11 @@ test_results_cache = {
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and start monitoring"""
+    """
+    Initialize the application's database and start the background continuous monitoring task.
+    
+    This is run on application startup: it awaits database initialization via init_db() and then creates an asyncio background task for continuous_monitoring(), storing the task in the module-level `monitoring_task` variable so it can be cancelled on shutdown.
+    """
     logger.info("Starting Soapify API Monitor...")
     await init_db()
     
@@ -60,13 +64,27 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean up resources"""
+    """
+    Perform application shutdown cleanup.
+    
+    Cancels the background monitoring task (if running) and logs shutdown initiation. Intended to be registered as FastAPI shutdown event handler; does not raise exceptions.
+    """
     logger.info("Shutting down Soapify API Monitor...")
     if monitoring_task:
         monitoring_task.cancel()
 
 async def continuous_monitoring():
-    """Run continuous monitoring tasks"""
+    """
+    Continuously collect system metrics, persist them to the database, and evaluate alerts until cancelled.
+    
+    This coroutine runs an infinite loop that:
+    - Collects metrics from the global SystemMonitor.
+    - Persists a PerformanceMetric record to the database for each collection.
+    - Invokes check_alerts(metrics) to create Alert records when thresholds are exceeded.
+    - Sleeps for settings.TEST_INTERVAL_MINUTES between iterations.
+    
+    Stops cleanly when cancelled (asyncio.CancelledError). On other exceptions it logs the error and waits 60 seconds before retrying.
+    """
     while True:
         try:
             # Run system monitoring
@@ -91,7 +109,32 @@ async def continuous_monitoring():
             await asyncio.sleep(60)  # Wait a minute before retrying
 
 async def check_alerts(metrics: Dict[str, Any]):
-    """Check metrics and create alerts if needed"""
+    """
+    Evaluate runtime metrics and create Alert records in the database when thresholds are exceeded.
+    
+    This function inspects the provided metrics dict for known keys (notably
+    `avg_response_time_ms`, `total_requests`, and `failed_requests`) and generates
+    alerts when:
+    - average response time exceeds settings.ALERT_RESPONSE_TIME_MS, and/or
+    - error rate (failed_requests / total_requests * 100) exceeds
+      settings.ALERT_ERROR_RATE_PERCENT.
+    
+    If one or more alert conditions are met, corresponding Alert objects are
+    persisted to the database. If `total_requests` is zero or missing, error-rate
+    checks are skipped.
+    
+    Parameters:
+        metrics (Dict[str, Any]): A mapping of collected metrics. Expected keys:
+            - avg_response_time_ms (number): average response time in milliseconds.
+            - total_requests (int): total number of requests observed.
+            - failed_requests (int): number of failed requests.
+    
+    Side effects:
+        Persists Alert records to the database when alert conditions are triggered.
+    
+    Returns:
+        None
+    """
     alerts = []
     
     # Check response time
@@ -128,7 +171,18 @@ async def check_alerts(metrics: Dict[str, Any]):
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Main monitoring dashboard"""
+    """
+    Render the main monitoring dashboard page.
+    
+    Renders the "dashboard.html" Jinja2 template and injects the incoming request and the configured API base URL
+    so the frontend can make API calls relative to the server configuration.
+    
+    Parameters:
+        request (Request): FastAPI request object used by Jinja2Templates for URL generation and template context.
+    
+    Returns:
+        TemplateResponse: A Jinja2 TemplateResponse rendering the dashboard.
+    """
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "api_base_url": settings.API_BASE_URL
@@ -141,7 +195,21 @@ async def trigger_test_webhook(
     background_tasks: BackgroundTasks,
     params: Dict[str, Any] = {}
 ):
-    """Webhook endpoint for frontend to trigger server-side tests"""
+    """
+    Trigger a server-side test from a webhook request and schedule it to run in the background.
+    
+    Schedules run_triggered_test(test_type, params) as a background task, marks the global test_results_cache as in progress, and returns an accepted response with a test identifier.
+    
+    Parameters:
+        test_type (str): Identifier of the test to run (e.g., "all", "voice", "stt", "checklist", "load").
+        params (Dict[str, Any]): Optional test-specific parameters passed through to the background runner.
+    
+    Raises:
+        HTTPException: 409 Conflict if a test run is already in progress.
+    
+    Returns:
+        JSONResponse: 202 Accepted payload containing status, message, and a generated `test_id` timestamp.
+    """
     
     if test_results_cache["in_progress"]:
         raise HTTPException(status_code=409, detail="Tests already in progress")
@@ -159,7 +227,27 @@ async def trigger_test_webhook(
     })
 
 async def run_triggered_test(test_type: str, params: Dict[str, Any]):
-    """Run test triggered by frontend webhook"""
+    """
+    Execute a test requested via the frontend webhook and update the shared test_results_cache with progress and results.
+    
+    Runs the test specified by `test_type` using optional `params`. Supported `test_type` values:
+    - "all": run the full sequence via run_all_tests()
+    - "voice": run VoiceUploadTest.test_upload(file_path)
+    - "stt": run STTTest.test_transcription(audio_url, expected_text)
+    - "checklist": run ChecklistTest.test_create_checklist()
+    - "load": run LoadTest.run_concurrent_tests(...) for a specified service (defaults to "checklist")
+    
+    Side effects:
+    - Updates test_results_cache["progress"], test_results_cache["latest_results"], and clears test_results_cache["in_progress"] when finished.
+    - On exception, records the error in test_results_cache["latest_results"] and sets progress status to "failed".
+    
+    Parameters:
+        test_type (str): Type of test to run (see supported values above).
+        params (Dict[str, Any]): Optional parameters used by specific tests (e.g., file_path, audio_url, expected_text, concurrent_requests, service).
+    
+    Returns:
+        None
+    """
     try:
         test_results_cache["progress"] = {"status": "running", "test_type": test_type}
         
@@ -204,7 +292,14 @@ async def run_triggered_test(test_type: str, params: Dict[str, Any]):
 # NEW: Endpoint to check test progress
 @app.get("/api/webhook/test-status")
 async def get_test_status():
-    """Get current test status for frontend polling"""
+    """
+    Return the current background test status for frontend polling.
+    
+    Returns a JSONResponse with the following keys in its JSON body:
+    - in_progress (bool): whether a background test is currently running.
+    - progress: current progress information (percentage or a progress structure).
+    - latest_results: the most recent test results payload, or None if no results are available.
+    """
     return JSONResponse(content={
         "in_progress": test_results_cache["in_progress"],
         "progress": test_results_cache["progress"],
@@ -218,7 +313,23 @@ async def synchronized_test(
     frontend_results: Dict[str, Any],
     background_tasks: BackgroundTasks
 ):
-    """Receive frontend test results and run server-side tests in sync"""
+    """
+    Accept frontend test results, run the same server-side tests, compare the two, and return a combined payload.
+    
+    This endpoint handler:
+    - Records the incoming frontend test ID and timestamp.
+    - Executes server-side tests via run_all_tests() and collects current system metrics.
+    - Builds a combined result containing frontend results, server results, system metrics, and a comparison produced by compare_results().
+    - Schedules asynchronous persistence of the combined results via background_tasks.add_task(store_combined_results, combined_results).
+    
+    Parameters:
+        frontend_test_id (str): Identifier provided by the frontend to correlate this test run.
+        frontend_results (Dict[str, Any]): Results produced by the frontend tests; must be serializable to JSON.
+    
+    Returns:
+        fastapi.responses.JSONResponse: JSON response containing the combined payload with keys
+        "test_id", "timestamp", "frontend", "server", and "comparison".
+    """
     
     # Store frontend results
     frontend_timestamp = datetime.utcnow()
@@ -248,7 +359,24 @@ async def synchronized_test(
     return JSONResponse(content=combined_results)
 
 def compare_results(frontend: Dict, server: Dict) -> Dict:
-    """Compare frontend and server results"""
+    """
+    Compare test results reported by a frontend run and server-side run and summarize differences.
+    
+    This function checks, for each supported test type ("voice", "stt", "checklist") present in both inputs:
+    - Response time difference (milliseconds). Frontend is expected to use the key "responseTime" and server to use "response_time_ms"; missing values default to 0.
+    - Whether the boolean `success` flag matches between frontend and server; missing flags default to False.
+    When success flags differ, an entry describing the discrepancy is appended to "discrepancies".
+    
+    Parameters:
+        frontend (Dict): Frontend test results keyed by test type. Expected per-test keys include "responseTime" (ms) and "success" (bool).
+        server (Dict): Server-side test results keyed by test type. Expected per-test keys include "response_time_ms" (ms) and "success" (bool).
+    
+    Returns:
+        Dict: A summary with keys:
+            - "response_time_diff": mapping test_type -> {"frontend_ms", "server_ms", "difference_ms"}.
+            - "success_match": mapping test_type -> bool indicating whether success flags match.
+            - "discrepancies": list of discrepancy objects for mismatched success flags.
+    """
     comparison = {
         "response_time_diff": {},
         "success_match": {},
@@ -284,7 +412,13 @@ def compare_results(frontend: Dict, server: Dict) -> Dict:
     return comparison
 
 async def store_combined_results(results: Dict):
-    """Store combined test results"""
+    """
+    Persist a synchronized frontend+server test payload as a TestRun record.
+    
+    Accepts a combined results dictionary (must include a top-level "timestamp" in ISO 8601 format)
+    and writes a TestRun entry with test_type "synchronized", endpoint "combined", and the full payload
+    stored in the TestRun.test_data field. Any storage errors are logged; the function does not raise.
+    """
     try:
         async with get_db_session() as session:
             # Store as a special test run
@@ -304,7 +438,16 @@ async def store_combined_results(results: Dict):
 
 @app.post("/api/test/voice")
 async def test_voice_upload(background_tasks: BackgroundTasks):
-    """Trigger voice upload test"""
+    """
+    Trigger a voice upload integration test using a local sample audio file and return the test result.
+    
+    Runs the VoiceUploadTest.test_upload flow (awaited) against a fixed test file ("./test_audio/sample.wav"), schedules asynchronous persistence of the resulting payload via the provided background task, and returns a JSONResponse containing the test result.
+    
+    Note: The sample audio file must exist at "./test_audio/sample.wav" for the test to run successfully.
+    
+    Returns:
+        JSONResponse: HTTP response whose content is the test result dictionary.
+    """
     test = VoiceUploadTest()
     # You need to have test audio files ready
     test_file = "./test_audio/sample.wav"
@@ -318,7 +461,18 @@ async def test_voice_upload(background_tasks: BackgroundTasks):
 
 @app.post("/api/test/stt")
 async def test_stt(audio_url: str, expected_text: str = None):
-    """Trigger STT test"""
+    """
+    Run a speech-to-text (STT) test against the provided audio URL and return the test result as a JSON response.
+    
+    Performs an asynchronous STT transcription using STTTest.test_transcription(audio_url, expected_text). The resulting test payload is scheduled to be saved to the database in the background (non-blocking).
+    
+    Parameters:
+        audio_url (str): Publicly accessible URL to the audio file to transcribe.
+        expected_text (str, optional): Expected transcription text to compare against the STT output; if provided, the test result will include comparison/validation information.
+    
+    Returns:
+        fastapi.responses.JSONResponse: HTTP JSON response containing the test result dictionary produced by the STT test.
+    """
     test = STTTest()
     result = await test.test_transcription(audio_url, expected_text)
     
@@ -329,7 +483,12 @@ async def test_stt(audio_url: str, expected_text: str = None):
 
 @app.post("/api/test/checklist")
 async def test_checklist():
-    """Trigger checklist test"""
+    """
+    Run the checklist end-to-end test: create a checklist, and if creation succeeds, perform an update and a retrieval.
+    
+    Returns:
+        JSONResponse: A JSONResponse containing the test results. If creation succeeded and returned an ID, the response includes keys "create", "update", and "get" with each step's result object; otherwise the response contains only "create".
+    """
     test = ChecklistTest()
     
     # Create checklist
@@ -353,7 +512,21 @@ async def test_checklist():
 
 @app.post("/api/test/load/{test_type}")
 async def test_load(test_type: str, concurrent_requests: int = 10):
-    """Run load test"""
+    """
+    Run a load test for the specified test type.
+    
+    Performs a concurrent load test for the given `test_type`. Currently only the "checklist" type is implemented: it runs `ChecklistTest.test_create_checklist` concurrently `concurrent_requests` times and returns a JSONResponse with aggregated statistics. The "voice" and "stt" types are placeholders and are not implemented.
+    
+    Parameters:
+        test_type (str): The type of load test to run. Supported value: "checklist".
+        concurrent_requests (int): Number of concurrent requests to run (default 10).
+    
+    Returns:
+        fastapi.responses.JSONResponse: Aggregated statistics for the completed "checklist" load test.
+    
+    Raises:
+        fastapi.HTTPException: If `test_type` is not supported (HTTP 400).
+    """
     load_test = LoadTest()
     
     if test_type == "voice":
@@ -373,13 +546,29 @@ async def test_load(test_type: str, concurrent_requests: int = 10):
 
 @app.get("/api/metrics/system")
 async def get_system_metrics():
-    """Get current system metrics"""
+    """
+    Return current system metrics as a JSON HTTP response.
+    
+    Collects the latest metrics from the global system monitor and returns them
+    serialized in a FastAPI JSONResponse suitable for API clients.
+    
+    Returns:
+        fastapi.responses.JSONResponse: JSON response containing the metrics dictionary.
+    """
     metrics = await system_monitor.collect_metrics()
     return JSONResponse(content=metrics)
 
 @app.get("/api/metrics/performance")
 async def get_performance_metrics(hours: int = 24):
-    """Get performance metrics for the last N hours"""
+    """
+    Return system performance metrics collected in the last `hours` hours.
+    
+    Parameters:
+        hours (int): Time window in hours to retrieve metrics for (default: 24). Must be a non-negative integer.
+    
+    Returns:
+        fastapi.responses.JSONResponse: JSON payload with a "metrics" key containing the list of performance metric records for the requested time window.
+    """
     since = datetime.utcnow() - timedelta(hours=hours)
     
     async with get_db_session() as session:
@@ -391,7 +580,11 @@ async def get_performance_metrics(hours: int = 24):
 
 @app.get("/api/alerts")
 async def get_alerts(active_only: bool = True):
-    """Get alerts"""
+    """
+    Return a JSONResponse containing alert records.
+    
+    If active_only is True (default), only currently active/open alerts are returned; if False, historical and resolved alerts are included. The response body is {"alerts": [...]} where each alert is a dict representing the persisted Alert record (fields depend on the Alert model/schema).
+    """
     async with get_db_session() as session:
         # Query alerts from database
         alerts = []  # Fetch from database
@@ -400,7 +593,20 @@ async def get_alerts(active_only: bool = True):
 
 @app.post("/api/test/all")
 async def run_all_tests():
-    """Run all tests in sequence"""
+    """
+    Run the suite of automated tests (voice upload, conditional STT, and checklist) and return their aggregated results.
+    
+    This coroutine executes:
+    - a voice upload test (VoiceUploadTest.test_upload) using the local file "./test_audio/sample.wav";
+    - if the voice test reports success and returns an `audio_url`, runs an STT transcription test (STTTest.test_transcription) against that URL;
+    - a checklist creation test (ChecklistTest.test_create_checklist).
+    
+    Returns:
+        fastapi.responses.JSONResponse: JSON response whose content is a dict with keys:
+            - "voice": result dict from the voice upload test (always present).
+            - "stt": result dict from the STT test (present only if the voice test succeeded and provided `audio_url`).
+            - "checklist": result dict from the checklist test (always present).
+    """
     results = {}
     
     # Voice test
@@ -421,7 +627,14 @@ async def run_all_tests():
     return JSONResponse(content=results)
 
 async def store_test_result(result: Dict[str, Any]):
-    """Store test result in database"""
+    """
+    Persist a test run payload to the database as a TestRun record.
+    
+    Parameters:
+        result (Dict[str, Any]): A mapping of fields accepted by the TestRun model (e.g., timestamps, test_type, test_data).
+            The dict will be unpacked into TestRun(**result) and committed. The function does not raise on failure;
+            any storage error is logged and the exception is swallowed.
+    """
     try:
         async with get_db_session() as session:
             test_run = TestRun(**result)
@@ -432,7 +645,16 @@ async def store_test_result(result: Dict[str, Any]):
 
 @app.post("/api/diagnostics/analyze")
 async def analyze_error(request: dict):
-    """Analyze an error and provide diagnostic information"""
+    """
+    Analyze an error report and return diagnostic information.
+    
+    Expects `request` to be a dict containing:
+    - "error_message" (str): the error message or stack trace to analyze.
+    - "context" (dict, optional): additional contextual data to aid diagnosis.
+    
+    Returns:
+    A diagnosis object (typically a dict) produced by the diagnostic system. On internal failure, returns a FastAPI JSONResponse with status 500 and an "error" message.
+    """
     try:
         error_message = request.get("error_message", "")
         error_context = request.get("context", {})
@@ -451,7 +673,16 @@ async def analyze_error(request: dict):
 
 @app.get("/api/diagnostics/test-sequence/{endpoint}")
 async def get_test_sequence(endpoint: str):
-    """Get a test sequence for debugging an API endpoint"""
+    """
+    Return a generated test sequence for the given API endpoint.
+    
+    Parameters:
+        endpoint (str): The API endpoint identifier or path to generate a test sequence for.
+    
+    Returns:
+        On success: dict with keys "endpoint" (the provided endpoint) and "sequence" (the generated test steps).
+        On failure: fastapi.responses.JSONResponse with status_code 500 and a JSON body {"error": "<message>"} describing the failure.
+    """
     try:
         sequence = diagnostic_system.generate_test_sequence(endpoint)
         return {"endpoint": endpoint, "sequence": sequence}
@@ -464,7 +695,23 @@ async def get_test_sequence(endpoint: str):
 
 @app.get("/api/diagnostics/fix-script/{issue_type}")
 async def get_fix_script(issue_type: str, os: str = None):
-    """Get a fix script for a specific issue"""
+    """
+    Return a generated fix script for a given issue type and target operating system.
+    
+    Attempts to generate a fix script via the diagnostic system and returns a JSON-serializable
+    mapping with the requested issue_type, the resolved OS (provided or diagnostic system default),
+    and the script content. On internal failure, the function returns a FastAPI JSONResponse with
+    HTTP 500 and an error message.
+    
+    Parameters:
+        issue_type (str): Identifier of the issue to generate a fix for (e.g., "memory-leak", "config-mismatch").
+        os (str, optional): Target operating system for the fix script (e.g., "linux", "windows"). If omitted,
+            the diagnostic system's default OS will be used.
+    
+    Returns:
+        dict | fastapi.responses.JSONResponse: On success, a dict with keys "issue_type", "os", and "script".
+            On failure, a JSONResponse with status_code 500 and {"error": "<message>"}.
+    """
     try:
         script = diagnostic_system.generate_fix_script(issue_type, os)
         return {
@@ -481,7 +728,15 @@ async def get_fix_script(issue_type: str, os: str = None):
 
 @app.post("/api/optimizer/test-approaches")
 async def test_optimization_approaches():
-    """Test different API approaches and find the best configuration"""
+    """
+    Run the API optimizer's full set of experiments and record progress/results.
+    
+    Sets test_results_cache["optimization_in_progress"] and test_results_cache["optimization_progress"] while running, and stores the completed results in test_results_cache["optimization_results"].
+    
+    Returns:
+        dict: Optimization results produced by api_optimizer.optimize_all() on success.
+        fastapi.responses.JSONResponse: HTTP 500 JSON response with an "error" key if an exception occurs.
+    """
     try:
         test_results_cache["optimization_in_progress"] = True
         test_results_cache["optimization_progress"] = {"status": "Testing approaches..."}
@@ -504,7 +759,20 @@ async def test_optimization_approaches():
 
 @app.post("/api/optimizer/apply")
 async def apply_optimizations(request: dict):
-    """Apply the best configurations and create optimized project"""
+    """
+    Apply the provided optimization configurations and generate an optimized project bundle.
+    
+    Parameters:
+        request (dict): Incoming payload expected to contain a "best_configs" mapping with optimization settings.
+    
+    Returns:
+        dict: On success, a dictionary with keys:
+            - "success" (bool): True on successful application.
+            - "zip_path" (str): File path to the generated optimized zip archive.
+            - "report" (Any): Optimization report or metadata returned by the optimizer.
+            - "message" (str): Human-readable success message.
+        fastapi.responses.JSONResponse: On error, returns an HTTP 500 JSON response with an "error" message.
+    """
     try:
         best_configs = request.get("best_configs", {})
         

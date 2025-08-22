@@ -127,6 +127,22 @@ const ServerStatus = styled.div`
   align-items: center;
 `;
 
+/**
+ * UI component that runs and compares Frontend and Server tests in two modes: synchronized and parallel.
+ *
+ * Detailed behavior:
+ * - Provides controls to select mode ("sync" or "parallel") and trigger a test run.
+ * - Synchronized mode calls `serverSync.runSynchronizedTests(testRunner.runAllTests)` and stores the returned results (including a server-provided comparison).
+ * - Parallel mode calls `runParallelTests(testRunner.runAllTests, 'all')`, stores results and augments them with a local comparison produced by `compareParallelResults`.
+ * - Manages local state: `isRunning`, `results`, `serverStatus` ('idle' | 'running' | 'completed' | 'failed'), and `testMode`.
+ * - Shows user-facing notifications (toasts) for start, success, warnings when discrepancies exist, and errors.
+ * - Renders frontend and server result cards and a comparison section (including response-time diffs and discrepancy details) when results are available.
+ *
+ * Returns:
+ *   A React element rendering the tester UI.
+ *
+ * @returns {JSX.Element}
+ */
 function SynchronizedTester() {
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState(null);

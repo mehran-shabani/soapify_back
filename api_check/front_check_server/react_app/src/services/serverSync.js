@@ -137,7 +137,22 @@ export const serverSync = {
   }
 };
 
-// Helper function to run parallel tests
+/**
+ * Run a frontend test and trigger a server test in parallel, then wait for the server test to finish and return aggregated results.
+ *
+ * Starts the provided frontend test runner and triggers a server-side test concurrently. After both start, waits for the server test to complete, captures frontend and server results, timing information, and any error message encountered.
+ *
+ * @param {Function} testRunner - Async function that runs the frontend test and resolves to its results.
+ * @param {string} serverTestType - Identifier for the server test type to trigger.
+ * @param {Object} [serverParams={}] - Optional parameters sent when triggering the server test.
+ * @return {Promise<Object>} An object containing:
+ *   - frontend: frontend test result (or null if it failed to start),
+ *   - server: server test latest results (or null),
+ *   - startTime: millisecond timestamp when the run started,
+ *   - endTime: millisecond timestamp when the run finished,
+ *   - totalTime: duration in milliseconds (endTime - startTime),
+ *   - error: optional error message if an error occurred.
+ */
 export async function runParallelTests(testRunner, serverTestType, serverParams = {}) {
   const results = {
     frontend: null,
