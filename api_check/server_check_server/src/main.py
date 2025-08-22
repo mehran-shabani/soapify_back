@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware  # Add CORS support
 import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -17,6 +18,15 @@ from .models import TestRun, VoiceTestResult, PerformanceMetric, Alert
 
 app = FastAPI(title="Soapify API Monitor", version="1.0.0")
 
+# Add CORS middleware to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Initialize components
 system_monitor = SystemMonitor()
 performance_tracker = PerformanceTracker()
@@ -26,6 +36,13 @@ templates = Jinja2Templates(directory="templates")
 
 # Background task for continuous monitoring
 monitoring_task = None
+
+# Store test results for frontend access
+test_results_cache = {
+    "latest_results": None,
+    "in_progress": False,
+    "progress": {}
+}
 
 @app.on_event("startup")
 async def startup_event():
@@ -112,6 +129,174 @@ async def dashboard(request: Request):
         "request": request,
         "api_base_url": settings.API_BASE_URL
     })
+
+# NEW: Webhook endpoint for frontend to trigger tests
+@app.post("/api/webhook/trigger-test")
+async def trigger_test_webhook(
+    test_type: str,
+    background_tasks: BackgroundTasks,
+    params: Dict[str, Any] = {}
+):
+    """Webhook endpoint for frontend to trigger server-side tests"""
+    
+    if test_results_cache["in_progress"]:
+        raise HTTPException(status_code=409, detail="Tests already in progress")
+    
+    test_results_cache["in_progress"] = True
+    test_results_cache["progress"] = {"status": "starting", "test_type": test_type}
+    
+    # Run test in background
+    background_tasks.add_task(run_triggered_test, test_type, params)
+    
+    return JSONResponse(content={
+        "status": "accepted",
+        "message": f"Test {test_type} triggered successfully",
+        "test_id": datetime.utcnow().isoformat()
+    })
+
+async def run_triggered_test(test_type: str, params: Dict[str, Any]):
+    """Run test triggered by frontend webhook"""
+    try:
+        test_results_cache["progress"] = {"status": "running", "test_type": test_type}
+        
+        if test_type == "all":
+            results = await run_all_tests()
+        elif test_type == "voice":
+            test = VoiceUploadTest()
+            results = await test.test_upload(params.get("file_path", "./test_audio/sample.wav"))
+        elif test_type == "stt":
+            test = STTTest()
+            results = await test.test_transcription(
+                params.get("audio_url", ""),
+                params.get("expected_text")
+            )
+        elif test_type == "checklist":
+            test = ChecklistTest()
+            results = await test.test_create_checklist()
+        elif test_type == "load":
+            load_test = LoadTest()
+            concurrent = params.get("concurrent_requests", 10)
+            service = params.get("service", "checklist")
+            
+            if service == "checklist":
+                stats = await load_test.run_concurrent_tests(
+                    ChecklistTest().test_create_checklist,
+                    concurrent
+                )
+            results = {"load_test": stats}
+        else:
+            results = {"error": "Unknown test type"}
+        
+        test_results_cache["latest_results"] = results
+        test_results_cache["progress"] = {"status": "completed", "test_type": test_type}
+        
+    except Exception as e:
+        logger.error(f"Error in triggered test: {e}")
+        test_results_cache["latest_results"] = {"error": str(e)}
+        test_results_cache["progress"] = {"status": "failed", "error": str(e)}
+    finally:
+        test_results_cache["in_progress"] = False
+
+# NEW: Endpoint to check test progress
+@app.get("/api/webhook/test-status")
+async def get_test_status():
+    """Get current test status for frontend polling"""
+    return JSONResponse(content={
+        "in_progress": test_results_cache["in_progress"],
+        "progress": test_results_cache["progress"],
+        "latest_results": test_results_cache["latest_results"]
+    })
+
+# NEW: Endpoint for synchronized testing
+@app.post("/api/webhook/sync-test")
+async def synchronized_test(
+    frontend_test_id: str,
+    frontend_results: Dict[str, Any],
+    background_tasks: BackgroundTasks
+):
+    """Receive frontend test results and run server-side tests in sync"""
+    
+    # Store frontend results
+    frontend_timestamp = datetime.utcnow()
+    
+    # Run server-side tests
+    server_results = await run_all_tests()
+    
+    # Combine results
+    combined_results = {
+        "test_id": frontend_test_id,
+        "timestamp": frontend_timestamp.isoformat(),
+        "frontend": {
+            "results": frontend_results,
+            "source": "client"
+        },
+        "server": {
+            "results": server_results,
+            "source": "server",
+            "system_metrics": await system_monitor.collect_metrics()
+        },
+        "comparison": compare_results(frontend_results, server_results)
+    }
+    
+    # Store combined results
+    background_tasks.add_task(store_combined_results, combined_results)
+    
+    return JSONResponse(content=combined_results)
+
+def compare_results(frontend: Dict, server: Dict) -> Dict:
+    """Compare frontend and server results"""
+    comparison = {
+        "response_time_diff": {},
+        "success_match": {},
+        "discrepancies": []
+    }
+    
+    # Compare response times
+    for test_type in ["voice", "stt", "checklist"]:
+        if test_type in frontend and test_type in server:
+            frontend_time = frontend[test_type].get("responseTime", 0)
+            server_time = server[test_type].get("response_time_ms", 0)
+            
+            comparison["response_time_diff"][test_type] = {
+                "frontend_ms": frontend_time,
+                "server_ms": server_time,
+                "difference_ms": abs(frontend_time - server_time)
+            }
+            
+            # Check if success status matches
+            frontend_success = frontend[test_type].get("success", False)
+            server_success = server[test_type].get("success", False)
+            
+            comparison["success_match"][test_type] = frontend_success == server_success
+            
+            if not comparison["success_match"][test_type]:
+                comparison["discrepancies"].append({
+                    "test": test_type,
+                    "issue": "Success status mismatch",
+                    "frontend": frontend_success,
+                    "server": server_success
+                })
+    
+    return comparison
+
+async def store_combined_results(results: Dict):
+    """Store combined test results"""
+    try:
+        async with get_db_session() as session:
+            # Store as a special test run
+            test_run = TestRun(
+                test_type="synchronized",
+                endpoint="combined",
+                method="POST",
+                started_at=datetime.fromisoformat(results["timestamp"]),
+                completed_at=datetime.utcnow(),
+                success=True,
+                test_data=results
+            )
+            session.add(test_run)
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to store combined results: {e}")
 
 @app.post("/api/test/voice")
 async def test_voice_upload(background_tasks: BackgroundTasks):

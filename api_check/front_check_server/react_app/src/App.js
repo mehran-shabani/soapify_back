@@ -7,6 +7,7 @@ import VoiceRecorder from './components/VoiceRecorder';
 import TestResults from './components/TestResults';
 import LoadTester from './components/LoadTester';
 import Dashboard from './components/Dashboard';
+import SynchronizedTester from './components/SynchronizedTester';
 import { testRunner } from './services/apiService';
 
 const AppContainer = styled.div`
@@ -76,6 +77,7 @@ const TabContainer = styled.div`
   gap: 10px;
   margin-bottom: 20px;
   border-bottom: 2px solid #ecf0f1;
+  flex-wrap: wrap;
 `;
 
 const Tab = styled.button`
@@ -93,6 +95,35 @@ const Tab = styled.button`
   }
 `;
 
+const ServerIndicator = styled.div`
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: ${props => props.connected ? '#27ae60' : '#e74c3c'};
+  color: white;
+  padding: 10px 20px;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1000;
+`;
+
+const PulseIndicator = styled.div`
+  width: 10px;
+  height: 10px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+
+  @keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+`;
+
 function App() {
   const [activeTab, setActiveTab] = useState('tests');
   const [isRunningTests, setIsRunningTests] = useState(false);
@@ -103,6 +134,7 @@ function App() {
     avgResponseTime: 0,
     lastUpdated: null
   });
+  const [serverConnected, setServerConnected] = useState(false);
 
   useEffect(() => {
     // Load saved results from localStorage
@@ -110,6 +142,9 @@ function App() {
     if (savedResults) {
       setTestResults(JSON.parse(savedResults));
     }
+    
+    // Check server connection
+    checkServerConnection();
   }, []);
 
   useEffect(() => {
@@ -137,6 +172,17 @@ function App() {
       });
     }
   }, [testResults]);
+
+  const checkServerConnection = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_MONITOR_URL || 'http://localhost:8080'}/api/metrics/system`
+      );
+      setServerConnected(response.ok);
+    } catch (error) {
+      setServerConnected(false);
+    }
+  };
 
   const handleRunAllTests = async () => {
     setIsRunningTests(true);
@@ -219,6 +265,9 @@ function App() {
           <Tab active={activeTab === 'load'} onClick={() => setActiveTab('load')}>
             تست بار
           </Tab>
+          <Tab active={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>
+            تست همزمان
+          </Tab>
           <Tab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>
             داشبورد
           </Tab>
@@ -236,10 +285,21 @@ function App() {
           <LoadTester />
         )}
 
+        {activeTab === 'sync' && (
+          <SynchronizedTester />
+        )}
+
         {activeTab === 'dashboard' && (
           <Dashboard data={dashboardData} results={testResults} />
         )}
       </MainContent>
+
+      <ServerIndicator connected={serverConnected}>
+        <PulseIndicator />
+        <span>
+          {serverConnected ? 'متصل به سرور مانیتورینگ' : 'عدم اتصال به سرور'}
+        </span>
+      </ServerIndicator>
 
       <ToastContainer 
         position="bottom-right"

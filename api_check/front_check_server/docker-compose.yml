@@ -10,6 +10,7 @@ services:
       - "3000:80"
     environment:
       - REACT_APP_API_URL=https://django-m.chbk.app
+      - REACT_APP_SERVER_MONITOR_URL=${SERVER_MONITOR_URL:-http://your-server-ip:8080}
     restart: unless-stopped
     networks:
       - frontend_network
