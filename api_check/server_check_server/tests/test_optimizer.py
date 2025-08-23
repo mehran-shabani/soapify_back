@@ -107,8 +107,24 @@ class TestOptimizerPublicAPI:
         if not hasattr(optimizer, "optimize"):
             pytest.skip("optimize() not exposed")
         class Item:
-            def __init__(self, key, tag): self.key, self.tag = key, tag
-            def __repr__(self): return f"Item({self.key},{self.tag})"
+            def __init__(self, key, tag): """
+Create an Item used for stability tests.
+
+Parameters:
+    key: value used for comparison/sorting (e.g., numeric or comparable type).
+    tag: auxiliary payload preserved with the item (used to verify relative ordering).
+"""
+self.key, self.tag = key, tag
+            def __repr__(self): """
+Return the canonical developer-facing representation of the Item.
+
+The string is formatted as "Item(<key>,<tag>)", using the instance's
+key and tag attributes. Intended for debugging and logging; it should
+be unambiguous and, where possible, useful for reproducing the object.
+Returns:
+    str: The representation string, e.g. "Item(1,a)".
+"""
+return f"Item({self.key},{self.tag})"
         data = [Item(1, "a"), Item(1, "b"), Item(1, "c")]
         try:
             out = optimizer.optimize(data, key=lambda x: x.key)  # type: ignore[attr-defined]
