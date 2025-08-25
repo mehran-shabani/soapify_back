@@ -69,6 +69,7 @@ INSTALLED_APPS = [
 
     # Project apps
     'accounts',
+    'billing',
     'encounters',
     'stt',
     'nlp',
