@@ -3,12 +3,12 @@ from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 import ssl
 from datetime import timedelta
-
+from celery.schedules import crontab
 # -----------------------
 # Base & Env
 # -----------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(find_dotenv())
+load_dotenv()
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
@@ -36,12 +36,13 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
     "https://django-med.chbk.app",
     "https://django-m.chbk.app",
+    "https://soap.helssa.ir",
 ]
 
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-ROOT_URLCONF = 'medogram.urls'
+ROOT_URLCONF = 'soapify.urls'
 
 
 
@@ -89,13 +90,16 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "infra.middleware.HMACMiddleware",
-    "infra.middleware.RateLimitMiddleware",
-    "infra.middleware.SecurityMiddleware",
+
+    # custom قبل از common خوبه
+    "infra.middleware.hmac_auth.HMACAuthMiddleware",
+    "infra.middleware.rate_limit.RateLimitMiddleware",
+    "infra.middleware.security.SecurityMiddleware",
+
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "infra.middleware.csrf_exempt.CSRFFreeAPIMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",   # این هنوز لازمه
+    "infra.middleware.csrf_exempt.CSRFFreeAPIMiddleware",  # فقط برای /api/
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -238,90 +242,77 @@ SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False').lower() == 'true
 # -----------------------
 # Redis / Cache / Celery
 # -----------------------
+# از قبل تعریف شده‌اند:
+REDIS_HOST = "services.irn2.chabokan.net"
+REDIS_PORT = 15323
+REDIS_PASSWORD = "KLXfutAkhQdV1pxh"
 
-def _bool_env(name: str, default=False):
-    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
-
-REDIS_USE_TLS = _bool_env("REDIS_USE_TLS", False)
-_scheme = "rediss" if REDIS_USE_TLS else "redis"
-
-def _build_url(db: int) -> str:
-    # اگر REDIS_URL (قدیمی) ست شده باشد، همان را برمی‌گردانیم برای سازگاری
-    legacy = os.getenv("REDIS_URL")
-    if legacy:
-        return legacy
-    host = os.getenv("REDIS_HOST", "localhost")
-    port = os.getenv("REDIS_PORT", "6379")
-    password = os.getenv("REDIS_PASSWORD", "")
-    auth = f":{password}@" if password else ""
-    return f"{_scheme}://{auth}{host}:{port}/{db}"
-
-# امکان override با محیط
-REDIS_URL_CACHE   = os.getenv("REDIS_URL_CACHE")   or _build_url(0)
-REDIS_URL_BROKER  = os.getenv("REDIS_URL_BROKER")  or _build_url(1)
-REDIS_URL_RESULTS = os.getenv("REDIS_URL_RESULTS") or _build_url(2)
-REDIS_URL_CHANNELS= os.getenv("REDIS_URL_CHANNELS")or _build_url(3)
-
-# -----------------------
-# Django Cache (django-redis)
-# -----------------------
-CACHE_TIMEOUT = os.getenv("CACHE_TIMEOUT_SECONDS", None)
-CACHE_TIMEOUT = None if (CACHE_TIMEOUT in (None, "", "None")) else int(CACHE_TIMEOUT)
+# دیتابیس مخصوص کش (با Celery تداخل نداشته باشد)
+REDIS_DB_CACHE = 0
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL_CACHE,
+        "LOCATION": f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_CACHE}",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "SOCKET_CONNECT_TIMEOUT": 5,
-            "SOCKET_TIMEOUT": 5,
-            "HEALTH_CHECK_INTERVAL": 30,
+            "PASSWORD": REDIS_PASSWORD,
             "CONNECTION_POOL_KWARGS": {
-                "max_connections": 100,
+                "max_connections": 200,
                 "retry_on_timeout": True,
             },
-            # اگر TLS لازم است
-            **({"SSL": True} if REDIS_USE_TLS else {}),
+            "SOCKET_CONNECT_TIMEOUT": 5,  # ثانیه
+            "SOCKET_TIMEOUT": 5,          # ثانیه
         },
-        "TIMEOUT": CACHE_TIMEOUT,  # None=بدون انقضا؛ توصیه: مقدار معقول (مثلاً 300 ثانیه)
-        "KEY_PREFIX": "soapify",   # مطابق نام پروژه تنظیم شود
+        "TIMEOUT": 60 * 15,   # 15 دقیقه – بنا به نیاز تغییر بده
+        "KEY_PREFIX": "medogram",  # جلوگیری از تداخل کلیدها بین پروژه‌ها
     }
 }
 
-# (اختیاری) ذخیره‌ی سشن‌ها روی کش
-# SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-# SESSION_CACHE_ALIAS = "default"
+# ================== Django Sessions via Redis Cache ==================
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
 
-# -----------------------
-# Celery
-# -----------------------
+# انتخابی اما پیشنهادی:
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # یک هفته
+SESSION_SAVE_EVERY_REQUEST = False
+
+# ================== Celery & Redis ==================
+
+# DB های جدا برای بروکر و ریزالت
+REDIS_DB_BROKER = 1
+REDIS_DB_RESULT = 2
+
+# URLها
+REDIS_URL_BROKER = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_BROKER}"
+REDIS_URL_RESULT = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_RESULT}"
+
+# سازگاری با برخی هاست‌ها/نسخه‌های قدیمی
+BROKER_URL = REDIS_URL_BROKER
+CELERY_RESULT_BACKEND = REDIS_URL_RESULT
+
+# تنظیمات استاندارد Celery - همه‌چیز روی UTC می‌ماند
 CELERY_BROKER_URL = REDIS_URL_BROKER
-CELERY_RESULT_BACKEND = REDIS_URL_RESULTS
+CELERY_RESULT_BACKEND = REDIS_URL_RESULT
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ENABLE_UTC = True
+CELERY_TIMEZONE = 'UTC'  # همانند Django
 
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-CELERY_TIMEZONE = TIME_ZONE
-
-# توسعه
-CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "False").lower() == "true"
-CELERY_TASK_EAGER_PROPAGATES = os.getenv("CELERY_TASK_EAGER_PROPAGATES", "False").lower() == "true"
-
-# پایداری اتصال‌ها
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-BROKER_POOL_LIMIT = int(os.getenv("BROKER_POOL_LIMIT", "50"))  # تعداد کانکشن‌های باز به broker
-
-# TLS برای Celery (در صورت نیاز)
-if REDIS_USE_TLS:
-    BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE}
-    CELERY_REDIS_BACKEND_USE_SSL = BROKER_USE_SSL
-
-# زمان‌بندی‌های Beat
+# معادل 22:00 تهران = 18:30 UTC
 CELERY_BEAT_SCHEDULE = {
-    "cleanup-uncommitted-files": {
-        "task": "encounters.tasks.cleanup_uncommitted_files",
-        "schedule": 7200.0,  # هر ۲ ساعت
+    'close-open-chat-sessions-22-tehran': {
+        'task': 'medogram_tasks.close_open_sessions_task',
+        'schedule': crontab(minute=30, hour=18),
+        'options': {'queue': 'default'},
+        'args': [12],  # --hours=12
+    },
+    'summarize-chats-22-tehran': {
+        'task': 'medogram_tasks.summarize_all_users_chats_task',
+        'schedule': crontab(minute=30, hour=18),
+        'options': {'queue': 'default'},
+        'args': [None],  # limit=None
     },
 }
 
@@ -340,7 +331,6 @@ DEFAULT_FILE_STORAGE = 'uploads.storage.MinioMediaStorage'
 
 # URL عمومی برای دسترسی به فایل‌های media
 MEDIA_URL = f"{MINIO_ENDPOINT_URL}/{MINIO_MEDIA_BUCKET}/"
-
 
 # -----------------------
 # AI Providers
