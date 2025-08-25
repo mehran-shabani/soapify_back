@@ -155,12 +155,13 @@ ROOT_URLCONF = 'soapify.urls'
 # WSGI
 WSGI_APPLICATION = 'soapify.wsgi.application'
 
-# AWS Settings for tests
-AWS_ACCESS_KEY_ID = 'test-access-key'
-AWS_SECRET_ACCESS_KEY = 'test-secret-key'
-AWS_STORAGE_BUCKET_NAME = 'test-bucket'
-AWS_S3_REGION_NAME = 'us-east-1'
-AWS_S3_ENDPOINT_URL = None
+# MinIO Settings for tests
+MINIO_ENDPOINT_URL = 'http://localhost:9000'
+MINIO_ACCESS_KEY = 'test-access-key'
+MINIO_SECRET_KEY = 'test-secret-key'
+MINIO_MEDIA_BUCKET = 'test-bucket'
+MINIO_REGION_NAME = 'us-east-1'
+MINIO_USE_HTTPS = False
 
 # OpenAI Settings for tests
 OPENAI_API_KEY = 'test-openai-key'
