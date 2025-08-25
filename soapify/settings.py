@@ -163,7 +163,9 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 
-MEDIA_URL = '/media/'
+# Media files will be served from MinIO
+MEDIA_URL = f"{MINIO_ENDPOINT_URL}/{MINIO_MEDIA_BUCKET}/"
+# MEDIA_ROOT is not needed when using MinIO, but we keep it for compatibility
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -326,20 +328,27 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # -----------------------
-# S3 (اختیاری)
+# MinIO Configuration
 # -----------------------
-S3_ENDPOINT_URL      = os.getenv("S3_ENDPOINT_URL")        # مثال: http://minio:9000
-S3_BUCKET_NAME       = os.getenv("S3_BUCKET_NAME")
-S3_ACCESS_KEY_ID     = os.getenv("S3_ACCESS_KEY_ID")
-S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
-S3_REGION_NAME       = os.getenv("S3_REGION_NAME", None)
+MINIO_ENDPOINT_URL = os.getenv("MINIO_ENDPOINT_URL", "http://minio:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME", "us-east-1")
+MINIO_MEDIA_BUCKET = os.getenv("MINIO_MEDIA_BUCKET", "soapify-media")
+MINIO_STATIC_BUCKET = os.getenv("MINIO_STATIC_BUCKET", "soapify-static")
 
-# توصیه‌شده برای MinIO/AWS
-S3_SIGNATURE_VERSION = "s3v4"
-S3_ADDRESSING_STYLE  = "path"
-S3_QUERYSTRING_AUTH  = False
-S3_DEFAULT_ACL       = None
-S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+# استفاده از MinIO برای ذخیره‌سازی فایل‌های media
+DEFAULT_FILE_STORAGE = 'uploads.storage.MinioMediaStorage'
+
+# تنظیمات اضافی MinIO
+MINIO_USE_HTTPS = os.getenv("MINIO_USE_HTTPS", "false").lower() == "true"
+
+# AWS Compatibility (برای سازگاری با کدهای قدیمی)
+AWS_ACCESS_KEY_ID = MINIO_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY = MINIO_SECRET_KEY
+AWS_STORAGE_BUCKET_NAME = MINIO_MEDIA_BUCKET
+AWS_S3_REGION_NAME = MINIO_REGION_NAME
+AWS_S3_ENDPOINT_URL = MINIO_ENDPOINT_URL
 
 
 # -----------------------

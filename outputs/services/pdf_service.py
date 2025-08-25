@@ -40,13 +40,9 @@ class PDFService:
         else:
             self.font_config = None
         
-        self.s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL
-        )
+        # استفاده از MinIO client
+        from uploads.minio import get_minio_client
+        self.minio_client = get_minio_client()
     
     def generate_pdf_from_html(
         self,
@@ -144,9 +140,9 @@ class PDFService:
             s3_key = f"outputs/pdf/{filename}"
             
             # Upload file
-            self.s3_client.upload_file(
+            self.minio_client.upload_file(
                 local_path,
-                settings.AWS_STORAGE_BUCKET_NAME,
+                settings.MINIO_MEDIA_BUCKET,
                 s3_key,
                 ExtraArgs={
                     'ContentType': 'application/pdf',
@@ -158,7 +154,7 @@ class PDFService:
             
             return {
                 's3_key': s3_key,
-                's3_bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                's3_bucket': settings.MINIO_MEDIA_BUCKET,
                 'uploaded': True
             }
             
@@ -187,10 +183,10 @@ class PDFService:
             Presigned download URL
         """
         try:
-            presigned_url = self.s3_client.generate_presigned_url(
+            presigned_url = self.minio_client.generate_presigned_url(
                 'get_object',
                 Params={
-                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Bucket': settings.MINIO_MEDIA_BUCKET,
                     'Key': s3_key,
                 },
                 ExpiresIn=expires_in

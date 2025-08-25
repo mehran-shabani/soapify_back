@@ -26,17 +26,13 @@ def generate_presigned_url(bucket_name, object_key, expiration=3600, http_method
     Returns:
         dict: Contains presigned URL and fields
     """
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        region_name=settings.AWS_S3_REGION_NAME,
-        endpoint_url=settings.AWS_S3_ENDPOINT_URL
-    )
+    # استفاده از MinIO client
+    from uploads.minio import get_minio_client
+    minio_client = get_minio_client()
     
     try:
         if http_method == 'PUT':
-            response = s3_client.generate_presigned_post(
+            response = minio_client.generate_presigned_post(
                 Bucket=bucket_name,
                 Key=object_key,
                 ExpiresIn=expiration,

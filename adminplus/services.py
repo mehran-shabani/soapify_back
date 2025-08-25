@@ -193,27 +193,22 @@ class AdminDashboardService:
     def _check_storage_health(self) -> Dict[str, Any]:
         """Check S3 storage connectivity."""
         try:
-            import boto3
             from botocore.exceptions import ClientError
+            from uploads.minio import get_minio_client
             
-            s3_client = boto3.client(
-                's3',
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.AWS_S3_REGION_NAME,
-                endpoint_url=settings.AWS_S3_ENDPOINT_URL
-            )
+            minio_client = get_minio_client()
             
             # Test bucket access
-            bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-            s3_client.head_bucket(Bucket=bucket_name)
+            bucket_name = settings.MINIO_MEDIA_BUCKET
+            minio_client.head_bucket(Bucket=bucket_name)
             
             return {
                 'status': 'healthy',
-                'message': f'S3 bucket {bucket_name} is accessible',
+                'message': f'MinIO bucket {bucket_name} is accessible',
                 'metrics': {
                     'bucket_name': bucket_name,
-                    'region': settings.AWS_S3_REGION_NAME
+                    'endpoint': settings.MINIO_ENDPOINT_URL,
+                    'region': settings.MINIO_REGION_NAME
                 }
             }
         

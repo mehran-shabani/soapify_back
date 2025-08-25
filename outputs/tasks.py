@@ -255,20 +255,15 @@ def generate_json_export(finalized_soap_id: int):
         json_content = json.dumps(json_data, ensure_ascii=False, indent=2)
         
         # Upload to S3
-        import boto3
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL
-        )
+        # استفاده از MinIO client
+        from uploads.minio import get_minio_client
+        minio_client = get_minio_client()
         
         filename = f"soap_note_{finalized_soap.patient_ref}_{finalized_soap.id}.json"
         s3_key = f"outputs/json/{filename}"
         
-        s3_client.put_object(
-            Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+        minio_client.put_object(
+            Bucket=settings.MINIO_MEDIA_BUCKET,
             Key=s3_key,
             Body=json_content.encode('utf-8'),
             ContentType='application/json',

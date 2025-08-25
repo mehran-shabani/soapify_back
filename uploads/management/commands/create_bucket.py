@@ -2,13 +2,13 @@ from django.core.management.base import BaseCommand
 from botocore.exceptions import ClientError
 from django.conf import settings
 
-from upload.s3 import get_s3_client, get_bucket_name
+from uploads.minio import get_minio_client, get_bucket_name
 
 class Command(BaseCommand):
-    help = "Create S3 bucket if it does not exist"
+    help = "Create MinIO bucket if it does not exist"
 
     def handle(self, *args, **options):
-        client = get_s3_client()
+        client = get_minio_client()
         bucket = get_bucket_name()
 
         # آیا وجود دارد؟
@@ -22,10 +22,25 @@ class Command(BaseCommand):
                 raise
 
         # ایجاد باکت
-        params = {"Bucket": bucket}
-        region = getattr(settings, "S3_REGION_NAME", None)
-        if region and region != "us-east-1":
-            params["CreateBucketConfiguration"] = {"LocationConstraint": region}
-
-        client.create_bucket(**params)
+        client.create_bucket(Bucket=bucket)
         self.stdout.write(self.style.SUCCESS(f"Bucket '{bucket}' created successfully 🚀"))
+        
+        # تنظیم policy برای دسترسی عمومی
+        import json
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": "*"},
+                    "Action": ["s3:GetObject"],
+                    "Resource": f"arn:aws:s3:::{bucket}/*"
+                }
+            ]
+        }
+        
+        client.put_bucket_policy(
+            Bucket=bucket,
+            Policy=json.dumps(policy)
+        )
+        self.stdout.write(self.style.SUCCESS(f"Public read policy set for '{bucket}' 🔓"))
