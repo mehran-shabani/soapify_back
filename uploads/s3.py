@@ -1,37 +1,58 @@
+# upload/s3.py
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
-
+from django.conf import settings
 import boto3
-
-
-@dataclass
-class S3Config:
-    endpoint_url: str | None
-    bucket_name: str
-    region_name: str | None
-    access_key_id: str | None
-    secret_access_key: str | None
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 
 
 def get_s3_client():
+    """
+    ساخت boto3 client بر اساس settings با پیشوند S3_
+    """
+    cfg = BotoConfig(
+        s3={"addressing_style": settings.S3_ADDRESSING_STYLE},
+        signature_version=settings.S3_SIGNATURE_VERSION,
+    )
     return boto3.client(
         "s3",
-        endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-        region_name=os.getenv("S3_REGION_NAME") or None,
-        aws_access_key_id=os.getenv("S3_ACCESS_KEY_ID") or None,
-        aws_secret_access_key=os.getenv("S3_SECRET_ACCESS_KEY") or None,
+        endpoint_url=settings.S3_ENDPOINT_URL,
+        region_name=settings.S3_REGION_NAME,
+        aws_access_key_id=settings.S3_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
+        config=cfg,
     )
 
 
 def get_bucket_name() -> str:
-    bucket = os.getenv("S3_BUCKET_NAME")
-    if not bucket:
+    if not settings.S3_BUCKET_NAME:
         raise RuntimeError("S3_BUCKET_NAME is required for S3 uploads")
-    return bucket
+    return settings.S3_BUCKET_NAME
 
 
 def build_object_key(session_id: str, filename: str) -> str:
     return f"audio_sessions/{session_id}/{filename}"
 
+
+def ensure_bucket_exists() -> None:
+    """
+    اگر باکت وجود نداشت، بساز (برای اجرای یک‌باره از طریق management command)
+    """
+    client = get_s3_client()
+    bucket = get_bucket_name()
+
+    try:
+        client.head_bucket(Bucket=bucket)
+        return
+    except ClientError as e:
+        code = (e.response.get("Error", {}).get("Code") or "").lower()
+        if code not in ("404", "notfound", "nosuchbucket"):
+            raise
+
+    params = {"Bucket": bucket}
+    region = settings.S3_REGION_NAME
+    if region and region != "us-east-1":
+        params["CreateBucketConfiguration"] = {"LocationConstraint": region}
+
+    client.create_bucket(**params)
