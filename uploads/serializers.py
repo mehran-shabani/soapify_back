@@ -1,7 +1,7 @@
+# upload/serializers.py
 from __future__ import annotations
 
 from rest_framework import serializers
-
 from .models import AudioChunk, AudioSession
 
 
@@ -9,7 +9,9 @@ class AudioSessionCreateSerializer(serializers.Serializer):
     storage_backend = serializers.ChoiceField(choices=["local", "s3"], default="local")
 
     def create(self, validated_data):
-        return AudioSession.objects.create(storage_backend=validated_data.get("storage_backend", "local"))
+        return AudioSession.objects.create(
+            storage_backend=validated_data.get("storage_backend", "local")
+        )
 
 
 class AudioChunkSerializer(serializers.ModelSerializer):
@@ -33,5 +35,3 @@ class AudioChunkSerializer(serializers.ModelSerializer):
 class CommitSerializer(serializers.Serializer):
     session_id = serializers.UUIDField()
     filename = serializers.CharField(required=False, default="audio.wav")
-    # For S3 commit flow we may not need to pass chunks
-
