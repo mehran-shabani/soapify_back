@@ -1,7 +1,7 @@
+# upload/urls.py
+from __future__ import annotations
 from django.urls import path
-
 from . import views
-
 
 urlpatterns = [
     path("session/create/", views.create_session),
@@ -11,4 +11,3 @@ urlpatterns = [
     path("s3/presign/", views.s3_presign_upload),
     path("s3/confirm/", views.s3_confirm_upload),
 ]
-
