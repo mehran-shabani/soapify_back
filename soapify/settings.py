@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'drf_yasg',
+    'storages',
     
 
     # Project apps
@@ -327,14 +328,19 @@ CELERY_BEAT_SCHEDULE = {
 # -----------------------
 # S3 (اختیاری)
 # -----------------------
-AWS_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'soapify-dev')
-AWS_S3_REGION_NAME = os.getenv('S3_REGION_NAME', 'us-east-1')
-AWS_S3_ENDPOINT_URL = os.getenv('S3_ENDPOINT_URL')
-AWS_S3_CUSTOM_DOMAIN = None
-AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = None
+S3_ENDPOINT_URL      = os.getenv("S3_ENDPOINT_URL")        # مثال: http://minio:9000
+S3_BUCKET_NAME       = os.getenv("S3_BUCKET_NAME")
+S3_ACCESS_KEY_ID     = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_REGION_NAME       = os.getenv("S3_REGION_NAME", None)
+
+# توصیه‌شده برای MinIO/AWS
+S3_SIGNATURE_VERSION = "s3v4"
+S3_ADDRESSING_STYLE  = "path"
+S3_QUERYSTRING_AUTH  = False
+S3_DEFAULT_ACL       = None
+S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+
 
 # -----------------------
 # AI Providers
