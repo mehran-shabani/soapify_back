@@ -163,9 +163,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 
-# Media files will be served from MinIO
-MEDIA_URL = f"{MINIO_ENDPOINT_URL}/{MINIO_MEDIA_BUCKET}/"
-# MEDIA_ROOT is not needed when using MinIO, but we keep it for compatibility
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
