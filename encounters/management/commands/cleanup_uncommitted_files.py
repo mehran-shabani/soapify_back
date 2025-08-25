@@ -44,14 +44,9 @@ class Command(BaseCommand):
             )
             return
         
-        # Initialize S3 client
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL
-        )
+        # Initialize MinIO client
+        from uploads.minio import get_minio_client
+        minio_client = get_minio_client()
         
         deleted_count = 0
         error_count = 0
@@ -61,9 +56,9 @@ class Command(BaseCommand):
                 if dry_run:
                     self.stdout.write(f'Would delete: {chunk.file_path}')
                 else:
-                    # Delete from S3
-                    s3_client.delete_object(
-                        Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                    # Delete from MinIO
+                    minio_client.delete_object(
+                        Bucket=settings.MINIO_MEDIA_BUCKET,
                         Key=chunk.file_path
                     )
                     

@@ -13,7 +13,7 @@ from django.core.files.base import ContentFile
 
 from .models import AudioSession
 from .serializers import AudioChunkSerializer, AudioSessionCreateSerializer, CommitSerializer
-from .s3 import build_object_key, get_bucket_name, get_s3_client
+from .minio import build_object_key, get_bucket_name, get_minio_client
 
 
 @csrf_exempt
@@ -89,7 +89,7 @@ def download_final(_request, session_id: str):
         return FileResponse(session.final_file.open("rb"), as_attachment=True)
 
     # s3: لینک signed GET
-    s3 = get_s3_client()
+    s3 = get_minio_client()
     url = s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": get_bucket_name(), "Key": session.s3_object_key},
@@ -113,7 +113,7 @@ def s3_presign_upload(request):
         return Response({"detail": "Session is not S3-backed"}, status=400)
 
     key = build_object_key(str(session.id), filename)
-    s3 = get_s3_client()
+    s3 = get_minio_client()
     url = s3.generate_presigned_post(
         Bucket=get_bucket_name(),
         Key=key,

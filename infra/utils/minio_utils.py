@@ -1,21 +1,21 @@
-import boto3
+"""
+MinIO utilities for file operations
+این ماژول جایگزین S3Utils می‌شود و از MinIO استفاده می‌کند
+"""
+
 import hashlib
 from django.conf import settings
 from botocore.exceptions import ClientError
 from typing import Optional, Dict, Any
+from uploads.minio import get_minio_client
 
 
-class S3Utils:
-    """Utilities for S3 operations"""
+class MinioUtils:
+    """Utilities for MinIO operations"""
     
     def __init__(self):
-        self.client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME
-        )
-        self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+        self.client = get_minio_client()
+        self.bucket_name = settings.MINIO_MEDIA_BUCKET
     
     def generate_presigned_url(
         self, 
@@ -26,11 +26,11 @@ class S3Utils:
         metadata: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
-        Generate a pre-signed URL for S3 operations
+        Generate a pre-signed URL for MinIO operations
         
         Args:
-            key: S3 object key
-            operation: S3 operation (put_object, get_object)
+            key: MinIO object key
+            operation: MinIO operation (put_object, get_object)
             expiration: URL expiration time in seconds
             content_type: Content type for upload
             metadata: Additional metadata for the object
@@ -72,7 +72,7 @@ class S3Utils:
         Verify an uploaded file
         
         Args:
-            key: S3 object key
+            key: MinIO object key
             etag: Expected ETag
             sha256: Expected SHA256 hash
             
@@ -106,9 +106,24 @@ class S3Utils:
             return False
     
     def delete_object(self, key: str) -> bool:
-        """Delete an object from S3"""
+        """Delete an object from MinIO"""
         try:
             self.client.delete_object(
+                Bucket=self.bucket_name,
+                Key=key
+            )
+            return True
+        except ClientError:
+            return False
+    
+    def get_object_url(self, key: str) -> str:
+        """Get public URL for an object"""
+        return f"{settings.MINIO_ENDPOINT_URL}/{self.bucket_name}/{key}"
+    
+    def object_exists(self, key: str) -> bool:
+        """Check if object exists in MinIO"""
+        try:
+            self.client.head_object(
                 Bucket=self.bucket_name,
                 Key=key
             )
@@ -124,10 +139,14 @@ def generate_presigned_url(
     **kwargs
 ) -> Dict[str, Any]:
     """Convenience function for generating presigned URLs"""
-    s3_utils = S3Utils()
-    return s3_utils.generate_presigned_url(
+    minio_utils = MinioUtils()
+    return minio_utils.generate_presigned_url(
         key=key,
         operation=operation,
         expiration=expiration,
         **kwargs
     )
+
+
+# Backward compatibility aliases
+S3Utils = MinioUtils  # برای سازگاری با کدهای قدیمی

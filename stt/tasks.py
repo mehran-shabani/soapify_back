@@ -45,14 +45,9 @@ def process_audio_stt(self, audio_chunk_id: int):
         
         logger.info(f"Starting STT processing for AudioChunk {audio_chunk_id}")
         
-        # Download file from S3
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL
-        )
+        # Download file from MinIO
+        from uploads.minio import get_minio_client
+        minio_client = get_minio_client()
         
         # Create temporary file
         with tempfile.NamedTemporaryFile(
@@ -60,9 +55,9 @@ def process_audio_stt(self, audio_chunk_id: int):
             delete=False
         ) as temp_file:
             try:
-                # Download from S3
-                s3_client.download_fileobj(
-                    settings.AWS_STORAGE_BUCKET_NAME,
+                # Download from MinIO
+                minio_client.download_fileobj(
+                    settings.MINIO_MEDIA_BUCKET,
                     audio_chunk.file_path,
                     temp_file
                 )

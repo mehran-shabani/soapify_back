@@ -93,27 +93,23 @@ def get_presigned_url(request):
         
         # Generate pre-signed URL
         try:
-            # Check if S3 is configured
+            # Check if MinIO is configured
             if not all([
-                settings.AWS_ACCESS_KEY_ID,
-                settings.AWS_SECRET_ACCESS_KEY,
-                settings.AWS_STORAGE_BUCKET_NAME
+                settings.MINIO_ACCESS_KEY,
+                settings.MINIO_SECRET_KEY,
+                settings.MINIO_MEDIA_BUCKET
             ]):
-                # For tests or development without S3
-                presigned_url = f"https://mock-s3-url.com/upload/{s3_key}"
+                # For tests or development without MinIO
+                presigned_url = f"https://mock-minio-url.com/upload/{s3_key}"
             else:
-                s3_client = boto3.client(
-                    's3',
-                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                    region_name=settings.AWS_S3_REGION_NAME,
-                    endpoint_url=settings.AWS_S3_ENDPOINT_URL
-                )
+                # استفاده از MinIO client
+                from uploads.minio import get_minio_client
+                minio_client = get_minio_client()
                 
-                presigned_url = s3_client.generate_presigned_url(
+                presigned_url = minio_client.generate_presigned_url(
                     'put_object',
                     Params={
-                        'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                        'Bucket': settings.MINIO_MEDIA_BUCKET,
                         'Key': s3_key,
                         'ContentType': content_type,
                     },
@@ -178,17 +174,13 @@ def commit_audio_file(request):
             )
         
         # Verify file exists in S3
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL
-        )
+        # استفاده از MinIO client
+        from uploads.minio import get_minio_client
+        minio_client = get_minio_client()
         
         try:
-            s3_client.head_object(
-                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+            minio_client.head_object(
+                Bucket=settings.MINIO_MEDIA_BUCKET,
                 Key=audio_chunk.file_path
             )
         except ClientError:
