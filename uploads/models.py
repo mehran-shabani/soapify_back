@@ -1,16 +1,17 @@
+# upload/models.py
 from __future__ import annotations
 
 import uuid
-
 from django.db import models
 from django.utils import timezone
 
 
-def upload_to_audio(instance: AudioChunk, filename: str) -> str:
+def upload_to_audio(instance: "AudioChunk", filename: str) -> str:
+    # توجه: instance.session_id (فیلد ضمنی FK) معتبر است
     return f"audio_chunks/{instance.session_id}/{instance.chunk_index}_{filename}"
 
 
-def upload_to_sessions(instance: AudioSession, filename: str) -> str:
+def upload_to_sessions(instance: "AudioSession", filename: str) -> str:
     return f"audio_sessions/{instance.id}/{filename}"
 
 
@@ -43,4 +44,3 @@ class AudioChunk(models.Model):
     class Meta:
         unique_together = ("session", "chunk_index")
         ordering = ["chunk_index"]
-
