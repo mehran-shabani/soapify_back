@@ -67,6 +67,13 @@ services:
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-here}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,django-m.chbk.app}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://django-m.chbk.app}
+      # MinIO settings
+      MINIO_ENDPOINT_URL: ${MINIO_ENDPOINT_URL:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_MEDIA_BUCKET: ${MINIO_MEDIA_BUCKET:-soapify-media}
+      MINIO_STATIC_BUCKET: ${MINIO_STATIC_BUCKET:-soapify-static}
+      MINIO_REGION_NAME: ${MINIO_REGION_NAME:-us-east-1}
     volumes:
       - ./static:/app/static
       - ./media:/app/media
